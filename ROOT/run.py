@@ -15,5 +15,6 @@ def run():
 if __name__ == "__main__":
 	run()
 else:
-	print(f'File Run: {os.getcwd()}')
-	run()
+	pass
+	# print("hello")
+	# run()
