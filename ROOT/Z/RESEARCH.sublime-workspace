@@ -1,0 +1,523 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"str",
+				"string"
+			],
+			[
+				"new",
+				"new_file_path"
+			],
+			[
+				"rename",
+				"rename_entry"
+			],
+			[
+				"old",
+				"old_ext"
+			],
+			[
+				"old_",
+				"old_ext"
+			],
+			[
+				"se",
+				"selfilename"
+			],
+			[
+				"item",
+				"item_value"
+			],
+			[
+				"t",
+				"True"
+			],
+			[
+				"app",
+				"APPENDED"
+			],
+			[
+				"op",
+				"open_or_create_file"
+			],
+			[
+				"ope",
+				"open_or_create_file"
+			],
+			[
+				"job",
+				"job_number"
+			],
+			[
+				"exi",
+				"existjob"
+			],
+			[
+				"jo",
+				"job_number"
+			],
+			[
+				"run",
+				"runstart"
+			],
+			[
+				"PI",
+				"PID_entry"
+			],
+			[
+				"stat",
+				"state_entry"
+			],
+			[
+				"cit",
+				"city_entry"
+			],
+			[
+				"varia",
+				"variables"
+			],
+			[
+				"fil",
+				"file_exclude_patterns"
+			],
+			[
+				"folde",
+				"folder_exclude_patterns"
+			],
+			[
+				"fold",
+				"folder_exclude_patterns"
+			],
+			[
+				"NO",
+				"noinput_message"
+			],
+			[
+				"spl",
+				"split_and_display_number"
+			],
+			[
+				"split",
+				"split_and_display_number"
+			],
+			[
+				"COM",
+				"comments_entry"
+			],
+			[
+				"st",
+				"st_label"
+			],
+			[
+				"m",
+				"mainloop"
+			],
+			[
+				"Do",
+				"DOR"
+			],
+			[
+				"D",
+				"date"
+			],
+			[
+				"do",
+				"DOR"
+			],
+			[
+				"ch",
+				"chkVP"
+			],
+			[
+				"id",
+				"id_entry"
+			],
+			[
+				"add",
+				"add_record"
+			],
+			[
+				"tab",
+				"tab4"
+			],
+			[
+				"s",
+				"shortcut_label"
+			],
+			[
+				"in",
+				"info_label"
+			],
+			[
+				"ad",
+				"add_record"
+			],
+			[
+				"F",
+				"F2_exitwin"
+			],
+			[
+				"ta",
+				"tab1"
+			],
+			[
+				"sele",
+				"selection"
+			]
+		]
+	},
+	"buffers":
+	[
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+		[
+			[
+				[
+					"Packages/Python/Python.sublime-build",
+					""
+				],
+				[
+					"Packages/Python/Python.sublime-build",
+					"Syntax Check"
+				]
+			],
+			[
+				"Packages/Python/Python.sublime-build",
+				""
+			]
+		]
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"git pu",
+				"git: push"
+			],
+			[
+				"comm",
+				"Git: Commit"
+			],
+			[
+				"add",
+				"Git: Add..."
+			],
+			[
+				"inst",
+				"Package Control: Install Package"
+			],
+			[
+				"git",
+				"git: pull"
+			],
+			[
+				"branch",
+				"git: branch"
+			],
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"ui",
+				"UI: Select Theme"
+			],
+			[
+				"insta",
+				"Package Control: Install Package"
+			],
+			[
+				"Install",
+				"Install Package Control"
+			]
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 155.0,
+		"history":
+		[
+			"Manhattan"
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/Users/sjohnstone/Python/RESEARCH V2"
+	],
+	"file_history":
+	[
+		"/Users/sjohnstone/Python/RESEARCH V2/__init__.py",
+		"/Users/sjohnstone/Python/RESEARCH V2/RESEARCH.sublime-project",
+		"/Users/sjohnstone/Python/2023/Research Log/Main-Research.py",
+		"/Users/sjohnstone/Python/SUBLIME PROJECTS/BARTENDER/MAIN/MAIN.PY",
+		"/Users/sjohnstone/Python/SUBLIME PROJECTS/BARTENDER/RECIPIES/RECIPIES.PY",
+		"/Users/sjohnstone/Python/SUBLIME PROJECTS/BARTENDER/PARTS LIST/PARTS LIST",
+		"/Users/sjohnstone/Python/SUBLIME PROJECTS/BARTENDER/RECIPIES/MAIN.PY",
+		"/Users/sjohnstone/Python/SUBLIME PROJECTS/RECIPES/RECIPIES.PY",
+		"/Users/sjohnstone/Python/SUBLIME PROJECTS/BARTENDER",
+		"/Users/sjohnstone/Python/2023/Research Log/Constants.py",
+		"/Users/sjohnstone/Python/2023/Test/Test-1.py",
+		"/Users/sjohnstone/Python/2023/Test/Test-2.py",
+		"/Users/sjohnstone/Python/2023/Test/Test-3.py",
+		"/Users/sjohnstone/Python/2023/Test/Test-3 copy.py",
+		"/Users/sjohnstone/Python/2023/Test/Test-4.py",
+		"/Users/sjohnstone/Python/2023/Test/test-5.py",
+		"/Users/sjohnstone/Python/2023/Test/outputTEST.pdf",
+		"/Users/sjohnstone/Python/2023/Test/bakuo",
+		"/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/tkinter/__init__.py",
+		"/Users/sjohnstone/Python/2023/Test/outputcorpie.pdf",
+		"/Users/sjohnstone/Python/2023/Test/output.pdf",
+		"/Users/sjohnstone/Library/Application Support/Sublime Text 3/Packages/User/SideBarEnhancements/Open With/Side Bar.sublime-menu",
+		"/Users/sjohnstone/Python/Example Code/trreee.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/9999R20240121.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/8888R20231228.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/6666R20231127.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/Research- consolidate test.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/5555R20231127.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/6666R20231126.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/5555R20231126.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/(Obs)Main-Research.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/5555R20231111.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/example2.pdf",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/5555R20231105.csv",
+		"/Users/sjohnstone/Python/Example Code/working preview.py",
+		"/Users/sjohnstone/Python/2023/Test/example.pdf",
+		"/Users/sjohnstone/Python/2023/Research Log/example.pdf",
+		"/Users/sjohnstone/Python/2023/Test/working preview.py",
+		"/Users/sjohnstone/Python/Example Code/basic pdf view.py",
+		"/Users/sjohnstone/Python/2023/Test/pdf_1.pdf",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/8888R20231119.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/Z - Backups/Research Log- backup 2023-11-18.py",
+		"/Users/sjohnstone/Python/Example Code/example-gitstartup.txt",
+		"/Users/sjohnstone/Python/2023/Test/data.mycsv",
+		"/Users/sjohnstone/Python/Example Code/ex-printparentchildtree.py",
+		"/Users/sjohnstone/Python/2023/Test/tree_state.json",
+		"/Users/sjohnstone/Desktop/Python/ANG_CONVERTER.py",
+		"/Users/sjohnstone/Python/OLD/DNDSESSIONLOG.py",
+		"/Users/sjohnstone/Desktop/Python/Converter.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/4567R20231106.csv",
+		"/Users/sjohnstone/Python/OLD/multiprogram_working.py",
+		"/Users/sjohnstone/Python/OLD/dearpygui_demo.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/1111R20231102.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/Z - Backups/Main-Research 2023-11-02.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Main-Research 2023-11-02.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Z - Backups/Research Log 2023-10-21.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/1111R20231021.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/12345R20231015.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/Functions.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Run.py",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/10234R20231012.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/12345R20231012.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/new.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/new.txt",
+		"/Users/sjohnstone/Python/2023/Research Log/CSV/NEW2.txt",
+		"/Users/sjohnstone/Python/2023/Research Log/new.txt",
+		"/Users/sjohnstone/Python/2023/Test/example.txt",
+		"/Users/sjohnstone/Python/2023/Test/main.py",
+		"/Users/sjohnstone/Python/2023/Test/other.py",
+		"/Users/sjohnstone/Python/Example Code/ex-separatepath.py",
+		"/Users/sjohnstone/Python/Example Code/ex-login.py",
+		"/Users/sjohnstone/Python/2023/Research Log/test.csv",
+		"/Users/sjohnstone/Python/Example Code/ex-splitentry.py",
+		"/Users/sjohnstone/Python/2023/Research Log/.gitignore",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Log.sublime-project",
+		"/Users/sjohnstone/Python/2023/try.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Output Files/records.csv",
+		"/Users/sjohnstone/Python/2023/Research Log/log.ico",
+		"/Users/sjohnstone/Python/2023/Research Log/pdf_1.pdf",
+		"/Users/sjohnstone/Python/2023/Research Log/icon.png",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Log 2023-09-30.py",
+		"/Users/sjohnstone/Python/2023/Research Log/GITHUB/*Research Log.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Log.py",
+		"/Users/sjohnstone/Python/2023/Research Log/temp.py",
+		"/Users/sjohnstone/Python/2023/Research Log/try2.py",
+		"/Users/sjohnstone/Python/2023/Research Log/records.csv",
+		"/Users/sjohnstone/Python/2023/example-split entry.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Log- backup 2023-09-24.py",
+		"/Users/sjohnstone/Python/2023/Research Log/new,py",
+		"/Users/sjohnstone/Python/2023/Research Log/1234,py",
+		"/Users/sjohnstone/Python/2023/Research Log/pdf.py",
+		"/Users/sjohnstone/Python/try.py",
+		"/Users/sjohnstone/Python/2023/Research Log/backup.py",
+		"/Users/sjohnstone/Python/2023/Research Log/EXAMPLE-SEPARATEPATH.PY",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Logbroken.py",
+		"/Users/sjohnstone/Python/2023/EXAMPLE-CHKFILE.py",
+		"/Users/sjohnstone/Python/2023/exampleCUSTOM TK LOGIN .py",
+		"/Users/sjohnstone/Python/example string split.py",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Log-backup 09-03-23.py",
+		"/Users/sjohnstone/Python/2023/Research Log/txt.txt",
+		"/Users/sjohnstone/Python/2023/example-login.py",
+		"/Users/sjohnstone/Python/OLD/TREEVIEW TEST.PY",
+		"/Users/sjohnstone/Python/2023/Research Log/Research Log-backup 09-01-23.py",
+		"/Users/sjohnstone/Python/2023/Research Log/backup 09-03-23(2).py",
+		"/Users/sjohnstone/Python/OLD/treeview.py",
+		"/Users/sjohnstone/Python/example-listboxautofill.py",
+		"/Users/sjohnstone/Python/2023/Research Log/example-restrictcapslock.py",
+		"/Users/sjohnstone/Python/DNDSESSIONLOG.py",
+		"/Users/sjohnstone/Python/2023/Research Log-Help.py",
+		"/Users/sjohnstone/Python/example-eventmodifiers.py",
+		"/Users/sjohnstone/Python/multiprogram_working.py",
+		"/Users/sjohnstone/Python/Research Log.py",
+		"/Users/sjohnstone/Python/2023/backup 09-01-23.py",
+		"/Users/sjohnstone/Python/records.csv",
+		"/Users/sjohnstone/Python/test123.py",
+		"/Users/sjohnstone/Python/2023/example-reference docs.py",
+		"/Users/sjohnstone/Python/genie.py",
+		"/Users/sjohnstone/Python/defs.py",
+		"/Users/sjohnstone/Python/2023/example_highlighttree.py",
+		"/Users/sjohnstone/Python/2023/example_bind.py",
+		"/Users/sjohnstone/Desktop/pyth22/practice.py",
+		"/Users/sjohnstone/Desktop/pyth22/dnd.py",
+		"/Users/sjohnstone/Desktop/rw5 processing/rw5.py",
+		"/Users/sjohnstone/Python/dndsessionlog.txt",
+		"/Users/sjohnstone/Desktop/pyth22/untitled.py",
+		"/Users/sjohnstone/Desktop/pyth22/TEST2.PY",
+		"/Users/sjohnstone/Desktop/cal.py",
+		"/Users/sjohnstone/Python/dearpygui_demo.py"
+	],
+	"find":
+	{
+		"height": 27.0
+	},
+	"find_in_files":
+	{
+		"height": 112.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"scrollbar_highlights": true,
+		"show_context": true,
+		"use_buffer2": true,
+		"use_gitignore": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 27.0
+	},
+	"input":
+	{
+		"height": 64.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.exec":
+	{
+		"height": 122.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "Packages/Python/Python.sublime-build",
+	"project": "RESEARCH.sublime-project",
+	"replace":
+	{
+		"height": 50.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": true,
+	"show_open_files": true,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 236.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
