@@ -1,10 +1,10 @@
 
 #. Research V2:	RUNNER 
 #. Executes the research program at the command line.	
-
-# Imports					
+#! NEEDS WORK... CAN NOT RUN FILE WITHOUT IMPORT ERROR... ASK BC?
+# Relative Imports					
 from RESEARCH.root import start
-from RESEARCH.UTILITY import *
+#/import RESEARCH
 
 # Definitions					
 def run():
@@ -14,3 +14,5 @@ if __name__ == "__main__":
 	run()
 else:
 	pass
+
+
