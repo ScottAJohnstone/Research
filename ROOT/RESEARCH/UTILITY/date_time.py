@@ -1,11 +1,14 @@
 from datetime import datetime
 
 # Current Date & Time as DateTime object
-dttm = datetime.now()
+DTTM = datetime.now()
 
 # # Current Date
-dt = dttm.date()
+DT = DTTM.date()
 
 # Current Time
-tm = dttm.time()
+TM = DTTM.time()
+
+#Current Date & Time as STR
+TODAY,junk=(str(DTTM)).split(".")
 
