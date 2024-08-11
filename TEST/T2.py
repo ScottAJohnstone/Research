@@ -1,64 +1,103 @@
 import tkinter as tk
+import re
 
-def show_context_menu(event, menu):
-    """Display the context menu at the mouse pointer's location."""
-    menu.post(event.x_root, event.y_root)
+# Relative Imports
+from UTILITY import date_time as dt
+from UTILITY import other as o
 
-def create_context_menu(root, items):
-    """Create a context menu with the given items."""
-    menu = tk.Menu(root, tearoff=0)
-    for label, command in items:
-        menu.add_command(label=label, command=command)
-    return menu
+def prelim():
+    global JBNUM_RAW
+    global current_window
+    # Set Constants
+    TODAY = dt.TODAY
+    CDATE = f'{TODAY}'                                      # Current Date
+    USR = o.usr                                             # Computer User
+    COM_COUNTER = 1                                         # -Find out what this was used for
+    DELAY_DEFAULT = 2500                                    # Default delay for Notifications
+    FOCUS_DEFAULT = "[SUBJECT]"                             # Default property focus [subject or abutter]
+    APPENDED_DEFAULT = "NULL"                               # Default file amendment status
+    JBNUM_RAW = ""                                          # Raw user input from start window entry widget
+    current_window = None                                   # Initialize the global variable
 
-def attach_context_menu(widget, menu):
-    """Attach the context menu to the given widget."""
-    widget.bind("<Button-3>", lambda event: show_context_menu(event, menu))
+def start():
+    global current_window
+    global delay
+    delay = 2500  # Set the delay for notifications
 
-def on_copy():
-    print("Copy selected")
+    def start_save():  # Save
+        pattern = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
+        if pattern.search(e_raw.get()):     # Search for special characters
+            print("NOT GOOD")
+        else:
+            if int(e_raw.get()) > 0:
+                print("good")
+                info(current_window, "Job number accepted")  # Show info label
+            else:
+                print("NOT GOOD")
 
-def on_paste():
-    print("Paste selected")
+    def start_destroy():  # Remove all existing widgets
+        for widget in start.winfo_children():
+            widget.destroy()
 
-def create_window_with_widgets():
-    """Create a new window with widgets that share the same context menu."""
-    window = tk.Toplevel()
-    window.title("Right Click Menu Example")
+    def on_key(event, entry, placeholder_text, default_fg):  # Handle the first key press e_raw
+        if entry.get() == placeholder_text:
+            entry.delete(0, tk.END)  # Clear entry
+            entry.config(fg=default_fg)
 
-    label = tk.Label(window, text="Right-click on this label")
-    label.pack(pady=10)
+    def placeholder(entry, placeholder_text="Enter job number...", placeholder_fg='grey', default_fg='white'):  # Create an Entry & placeholder
+        entry.insert(0, placeholder_text)
+        entry.focus_set()
+        entry.icursor(0)
+        entry.bind("<KeyPress>", lambda event: on_key(event, entry, placeholder_text, default_fg))
+        entry.pack(pady=(15, 5))
+        return entry
 
-    entry = tk.Entry(window)
-    entry.pack(pady=10)
+    # Create the main window
+    global current_window
+    start = tk.Tk()
+    start.title("Welcome - Research Log")
+    stht = 150
+    stwi = 350
+    screenht = start.winfo_screenheight()
+    screenwi = start.winfo_screenwidth()
+    x = (screenwi / 2) - (stwi / 2)
+    y = (screenht / 2) - (stht / 2)
+    start.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
+    start.resizable(False, False)
+    
+    placeholder_text = "Enter job number..."
+    jbnumraw = tk.StringVar()
 
-    # Create the context menu
-    context_menu = create_context_menu(window, [
-        ("Copy", on_copy),
-        ("Paste", on_paste),
-    ])
+    current_window = start
 
-    # Attach the context menu to the widgets
-    attach_context_menu(label, context_menu)
-    attach_context_menu(entry, context_menu)
+    e_raw = tk.Entry(start, fg='grey')
+    e_raw = placeholder(e_raw, placeholder_text)
+    b_save = tk.Button(start, text="Research", height="1", width="15", command=start_save)
+    b_save.pack()
+    b_help = tk.Button(start, text="Help", height="1", width="15")  # - work on help command
+    b_help.pack()
+    b_close = tk.Button(start, text="Exit", height="1", width="15", command=terminate)
+    b_close.pack()
 
-# Main application
-root = tk.Tk()
-root.title("Tkinter Right Click Menu")
+    start.mainloop()
 
-# Create a context menu for the main window's widgets
-context_menu = create_context_menu(root, [
-    ("Copy", on_copy),
-    ("Paste", on_paste),
-])
+def init():
+    print(JBNUM_RAW)
 
-# Attach the context menu to a widget in the main window
-main_label = tk.Label(root, text="Right-click on this label in the main window")
-main_label.pack(pady=10)
-attach_context_menu(main_label, context_menu)
+def terminate():
+    global current_window
+    if current_window is not None:
+        current_window.destroy()  # Close the window
+        current_window = None  # Reset the reference
 
-# Button to create a new window
-create_window_button = tk.Button(root, text="Open New Window", command=create_window_with_widgets)
-create_window_button.pack(pady=10)
+def info(window, text):
+    global delay
 
-root.mainloop()
+    info_label = tk.Label(window, text=text, font=('Helvetica', 10))
+    info_label.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=10)
+    window.update()
+    
+    # Destroy the label after the delay
+    window.after(delay, lambda: info_label.destroy())
+
+start()
