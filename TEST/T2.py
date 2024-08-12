@@ -25,15 +25,65 @@ def start():
     delay = 2500  # Set the delay for notifications
 
     def start_save():  # Save
-        pattern = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
-        if pattern.search(e_raw.get()):     # Search for special characters
-            print("NOT GOOD")
-        else:
-            if int(e_raw.get()) > 0:
+        value = e_raw.get().strip()  # Get and strip any surrounding whitespace
+
+        # Check if the value is not empty and is a valid number
+        try:
+            number = float(value)  # Try converting to a float (handles decimals and negative numbers)
+            if number > 0:
                 print("good")
                 info(current_window, "Job number accepted")  # Show info label
             else:
                 print("NOT GOOD")
+        except ValueError:
+            print("NOT GOOD")
+
+
+
+
+ def start_save():  # Save
+        pattern = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
+        if pattern.search(e_raw.get()):     # Search for special characters
+            info(current_window, "The only special character allowed is a hyphen...")
+        else: #* accepted
+            if "-" in e_raw.get():
+                JBNUM,DASH=e_raw.get().split("-")
+                print(JBNUM)
+                print(DASH)
+                if  e_raw.get() != "":#* accepted   
+                    if int(e_raw.get()) > 0:
+                        info(current_window, "Job number accepted...") #* accepted
+                    else:
+                        info(current_window, "Entry must be a number greater than zero...")
+                else:
+                    info(current_window, "Entry can not be blank...")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def start_destroy():  # Remove all existing widgets
         for widget in start.winfo_children():
@@ -68,6 +118,10 @@ def start():
     placeholder_text = "Enter job number..."
     jbnumraw = tk.StringVar()
 
+    # Create a frame for the info label
+    info_frame = tk.Frame(start)
+    info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
     current_window = start
 
     e_raw = tk.Entry(start, fg='grey')
@@ -93,9 +147,21 @@ def terminate():
 def info(window, text):
     global delay
 
-    info_label = tk.Label(window, text=text, font=('Helvetica', 10))
+    # Create or get the info frame
+    for widget in window.winfo_children():
+        if isinstance(widget, tk.Frame):
+            info_frame = widget
+            break
+    else:
+        info_frame = tk.Frame(window)
+        info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+    # Create the info label and add it to the frame
+    info_label = tk.Label(info_frame, text=text, font=('Helvetica', 10))
     info_label.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=10)
-    window.update()
+    
+    # Force the window to update its display
+    window.update_idletasks()
     
     # Destroy the label after the delay
     window.after(delay, lambda: info_label.destroy())

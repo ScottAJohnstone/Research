@@ -22,19 +22,63 @@ def prelim():
 def start():
     global current_window
     global delay
-    delay = 2500  # Set the delay for notifications
+    delay = 3500    # Set the delay for notifications
 
-    def start_save():  # Save
-        pattern = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
-        if pattern.search(e_raw.get()):     # Search for special characters
-            print("NOT GOOD")
-        else:
-            if int(e_raw.get()) > 0:
-                print("good")
-                info(current_window, "Job number accepted")  # Show info label
+    def start_save():
+            badchars = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
+            if e_raw.get()=="":                                                         #* fail
+                info(current_window, "Entry can not be left blank...")
+                e_raw.select_range(0, tk.END)                       
+                e_raw.focus_set() 
+            elif e_raw.get()=="Enter job number...":                                    #* fail
+                info(current_window, "Entry can not be left blank...")
+                e_raw.select_range(0, tk.END)
+                e_raw.focus_set() 
+            elif e_raw.get()=="-":                                                      #* fail
+                info(current_window, "Please enter a number...")
+                e_raw.select_range(0, tk.END)
+                e_raw.focus_set()
+            elif e_raw.get().isalpha():                                                 #* fail
+                info(current_window, "Please enter a number...")
+                e_raw.select_range(0, tk.END)
+                e_raw.focus_set()
+            elif badchars.search(e_raw.get()):                                          #* fail     
+                info(current_window, "The only special character allowed is a hyphen...")
+                e_raw.select_range(0, tk.END)
+                e_raw.focus_set()
             else:
-                print("NOT GOOD")
+                if e_raw.get().isnumeric() and float(e_raw.get()) > 0:                  #* pass
+                    info(current_window, "Entry accepted...")
+                    e_raw.select_range(0, tk.END)
+                    e_raw.focus_set()
+                elif "-" in e_raw.get():
+                    JBNUM,DASH=e_raw.get().split("-")                                   
+                    if  JBNUM == "":                                                    #* fail
+                        info(current_window, "Base job number must be greater than zero...")
+                    elif JBNUM.isalpha():                                               #* fail
+                         info(current_window, "Base job number must contain a number...")
+                    else:
+                        JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
 
+                        f = tk.Frame(start)
+                        f.pack()
+                        l = tk.Label(f_info, text=f'Please confirm base job number [{JBNUM}]...', font=('Helvetica', 10))
+                        l.pack(side=tk.BOTTOM, anchor=tk.S, padx=10,pady=(0,5))
+                        b_y = tk.Button(f, text="Yes",width=4)
+                        b_y.pack(side=tk.RIGHT,anchor=tk.SE, padx=10)
+                        b_n = tk.Button(f, text="No",width=4)
+                        b_n.pack(side=tk.RIGHT,anchor=tk.SW, padx=10)
+                       
+                else:                                                                   #* fail
+                    info(current_window, "Please enter a number greater than zero...") 
+                    e_raw.select_range(0, tk.END)
+                    e_raw.focus_set()
+            
+    def start_confirm():
+        def yes():
+            pass
+        def no():
+            pass
     def start_destroy():  # Remove all existing widgets
         for widget in start.winfo_children():
             widget.destroy()
@@ -56,8 +100,8 @@ def start():
     global current_window
     start = tk.Tk()
     start.title("Welcome - Research Log")
-    stht = 170
-    stwi = 350
+    stht = 175
+    stwi = 325
     screenht = start.winfo_screenheight()
     screenwi = start.winfo_screenwidth()
     x = (screenwi / 2) - (stwi / 2)
@@ -69,8 +113,8 @@ def start():
     jbnumraw = tk.StringVar()
 
     # Create a frame for the info label
-    info_frame = tk.Frame(start)
-    info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+    f_info = tk.Frame(start)
+    f_info.pack(side=tk.BOTTOM, fill=tk.X)
 
     current_window = start
 
@@ -100,14 +144,14 @@ def info(window, text):
     # Create or get the info frame
     for widget in window.winfo_children():
         if isinstance(widget, tk.Frame):
-            info_frame = widget
+            f_info = widget
             break
     else:
-        info_frame = tk.Frame(window)
-        info_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        f_info = tk.Frame(window)
+        f_info.pack(side=tk.BOTTOM, fill=tk.X)
 
     # Create the info label and add it to the frame
-    info_label = tk.Label(info_frame, text=text, font=('Helvetica', 10))
+    info_label = tk.Label(f_info, text=text, font=('Helvetica', 10))
     info_label.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=10)
     
     # Force the window to update its display
