@@ -2,6 +2,11 @@
 #. Research V2:	ROOT 
 #. Command line program to handle the organization and implementation of Title/Land Record documents and files.	
 
+#/                                                                                                               #/
+#/                                                                                                               #/
+
+
+
 import tkinter as tk
 import re
 
@@ -12,7 +17,6 @@ from UTILITY import other as o
 def prelim():
     global JBNUM_RAW
     global current_window
-    # Set Constants
     TODAY = dt.TODAY
     CDATE = f'{TODAY}'                                      # Current Date
     USR = o.usr                                             # Computer User
@@ -151,8 +155,8 @@ def start():
     start.mainloop()
 
 def init():
-    print(JBNUM_RAW)
-
+    print(JBNUM_RAW)                                           #- Need to complete
+    
 def terminate():
     global current_window
     if current_window is not None:
