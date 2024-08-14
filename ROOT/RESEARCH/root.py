@@ -5,8 +5,6 @@
 #/                                                                                                               #/
 #/                                                                                                               #/
 
-
-
 import tkinter as tk
 import re
 
@@ -68,28 +66,23 @@ def start():
                 else:
                     def yes():
                         start_destroy()
-                    def no():                                                       #- fix the broken loop here
-                        for widget in f_info.winfo_children():
-                            widget.destroy()
-                        for widget in f.winfo_children():
-                            widget.destroy()
+                    def no():
+                        f_info.destroy()
+                        f_btn.destroy()
                     JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
-                    f = tk.Frame(start)
-                    f.pack()
-                    l = tk.Label(f_info, text=f'Please confirm base job number [{JBNUM}]...', font=('Helvetica', 10))
-                    l.pack(side=tk.BOTTOM, anchor=tk.S, padx=10, pady=(0, 5))
-                    b_y = tk.Button(f, text="Yes", width=4, command=yes)
-                    b_y.pack(side=tk.RIGHT, anchor=tk.SE, padx=10)
-                    b_n = tk.Button(f, text="No", width=4, command=no)
-                    b_n.pack(side=tk.RIGHT, anchor=tk.SW, padx=10)
-            else:                                                                   #* fail
-                info(current_window, "Please enter a number greater than zero...") 
-                e_raw.select_range(0, tk.END)
-                e_raw.focus_set()
-
+                    info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)
+            elif not e_raw.get().isnumeric() and not e_raw.get().isalpha():
+                JBNUM = re.sub(r'[a-zA-Z]', '', e_raw.get())
+                JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
+                def yes():
+                    start_destroy()
+                def no():
+                    f_info.destroy()
+                    f_btn.destroy()
+                JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
+                info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)
+   
     def start_destroy():  # Remove all existing widgets
-        for widget in f_info.winfo_children():
-            widget.destroy()
         for widget in start.winfo_children():
             widget.destroy()
         
@@ -97,6 +90,27 @@ def start():
         if entry.get() == placeholder_text:
             entry.delete(0, tk.END)  # Clear entry
             entry.config(fg=default_fg)
+
+
+# def on_key(event, entry, placeholder_text, default_fg):
+#     # Handle the first key press to clear placeholder text
+#     if entry.get() == placeholder_text:
+#         entry.delete(0, tk.END)  # Clear entry
+#         entry.config(fg=default_fg)                                                   #- this is broken needs work
+
+#     #key bindings
+#     if event.keysym == "Return":  # Handle the Enter key (Return key)
+#         print("Enter key pressed - submit action")
+#         # You can add a call to a submit function here
+#     elif event.keysym == "Escape":  # Handle the Escape key
+#         print("Escape key pressed - cancel action")
+#         entry.delete(0, tk.END)  # Clear entry or perform another action
+#     elif event.keysym == "F1":  # Handle the F1 key
+#         print("F1 key pressed - show help")
+#         # Call a function to show help or any other task
+
+#     # Add more key bindings as needed
+
 
     def placeholder(entry, placeholder_text="Enter job number...", placeholder_fg='grey', default_fg='white'):  # Create an Entry & placeholder
         entry.insert(0, placeholder_text)
@@ -123,7 +137,7 @@ def start():
     # Create the main window
     start = tk.Tk()
     start.title("Welcome - Research Log")
-    stht = 175
+    stht = 182
     stwi = 325
     screenht = start.winfo_screenheight()
     screenwi = start.winfo_screenwidth()
@@ -143,11 +157,11 @@ def start():
 
     current_window = start
 
-    e_raw = tk.Entry(start, fg='grey')
+    e_raw = tk.Entry(start, fg='grey',width=17)
     e_raw = placeholder(e_raw, placeholder_text)
     b_save = tk.Button(start, text="Research", height="1", width="15", command=start_save)
     b_save.pack()
-    b_help = tk.Button(start, text="Help", height="1", width="15")  # - work on help command
+    b_help = tk.Button(start, text="Help", height="1", width="15")                                      # - work on help command
     b_help.pack()
     b_close = tk.Button(start, text="Exit", height="1", width="15", command=terminate)
     b_close.pack()
@@ -163,8 +177,9 @@ def terminate():
         current_window.destroy()  # Close the window
         current_window = None  # Reset the reference
 
-def info(window, text):
+def info(window, text, show_buttons=False, yes_command=None, no_command=None):
     global delay
+    global f_btn
 
     # Create or get the info frame
     for widget in window.winfo_children():
@@ -176,10 +191,26 @@ def info(window, text):
         f_info.pack(side=tk.BOTTOM, fill=tk.X)
 
     # Create the info label and add it to the frame
-    info_label = tk.Label(f_info, text=text, font=('Helvetica', 10))
-    info_label.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=10)
-    window.update_idletasks()    # Force the window to update its display
-    window.after(delay, lambda: info_label.destroy())
+    l_inf = tk.Label(f_info, text=text, font=('Helvetica', 10))
+    l_inf.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=(0, 5))
 
-# Call start function to run the application
-start()
+    if show_buttons:
+        # Create Yes and No buttons
+        f_btn = tk.Frame(f_info)
+        f_btn.pack(side=tk.BOTTOM)
+
+        b_y = tk.Button(f_btn, text="Yes", width=5, command=lambda: [l_inf.destroy(), yes_command()])
+        b_y.pack(side=tk.RIGHT, padx=(1,0))
+
+        b_n = tk.Button(f_btn, text="No", width=5, command=lambda: [l_inf.destroy(), no_command()])
+        b_n.pack(side=tk.LEFT, anchor=tk.SE, padx=(1,0))
+
+    window.update_idletasks()  # Force the window to update its display
+
+    # If no buttons are shown, destroy the info label after a delay
+    if not show_buttons:
+        window.after(delay, lambda: l_inf.destroy())
+
+
+
+start()                                                             # Call start function to run the application
