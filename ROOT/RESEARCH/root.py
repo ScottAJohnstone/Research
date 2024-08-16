@@ -30,73 +30,82 @@ def start():
     global delay
     delay = 3500    # Set the delay for notifications
 
-    def start_save():
-        badchars = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
+
+    def focusset():
+        e_raw.select_range(0, tk.END)
+        e_raw.focus_set()
+
+    def start_save():                                                                               #- FIX DASH CAPABILITY
+        badchars = re.compile(r'[!@#$%^&*(),.?":{}|<>+=\[\]\\/;\'`~\-]')     # Define unwanted characters
         if e_raw.get() == "":                                                         #* fail
             info(current_window, "Entry can not be left blank...")
-            e_raw.select_range(0, tk.END)                       
-            e_raw.focus_set() 
+            focusset()
         elif e_raw.get() == "Enter job number...":                                    #* fail
             info(current_window, "Entry can not be left blank...")
-            e_raw.select_range(0, tk.END)
-            e_raw.focus_set() 
+            focusset() 
         elif e_raw.get() == "-":                                                      #* fail
             info(current_window, "Please enter a number...")
-            e_raw.select_range(0, tk.END)
-            e_raw.focus_set()
+            focusset()
         elif e_raw.get().isalpha():                                                 #* fail
             info(current_window, "Please enter a number...")
-            e_raw.select_range(0, tk.END)
-            e_raw.focus_set()
+            focusset()
         elif badchars.search(e_raw.get()):                                          #* fail     
             info(current_window, "The only special character allowed is a hyphen...")
-            e_raw.select_range(0, tk.END)
-            e_raw.focus_set()
+            focusset()
         else:
-            if e_raw.get().isnumeric() and float(e_raw.get()) > 0:                  #* pass
+            if e_raw.get().isnumeric() and float(e_raw.get()) > 0:                  #* pass     if is num greater than 0 only
                 info(current_window, "Entry accepted...")
-                e_raw.select_range(0, tk.END)
-                e_raw.focus_set()
+                focusset()
+                JBNUM = e_raw.get()
+                DASH=""
             elif "-" in e_raw.get():
                 JBNUM, DASH = e_raw.get().split("-")                                   
                 if JBNUM == "":                                                    #* fail
                     info(current_window, "Base job number must be greater than zero...")
+                if DASH == "":                                                    #* fail
+                    info(current_window, "Please enter a dash or remove the '-'...")
                 elif JBNUM.isalpha():                                               #* fail
                     info(current_window, "Base job number must contain a number...")
-                else:
+                else:                                                              #* pass
                     def yes():
                         start_destroy()
                     def no():
+                        focusset()
                         f_info.destroy()
                         f_btn.destroy()
+                    JBNUM, DASH = e_raw.get().split("-")                                   
                     JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
                     info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)
             elif not e_raw.get().isnumeric() and not e_raw.get().isalpha():
                 JBNUM = re.sub(r'[a-zA-Z]', '', e_raw.get())
-                JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
+                DASH = re.sub(r'\d+', '', e_raw.get())
                 def yes():
                     start_destroy()
                 def no():
                     f_info.destroy()
                     f_btn.destroy()
                 JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
+                print(JBNUM)
+                print(DASH)
                 info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)
    
     def start_destroy():  # Remove all existing widgets
         for widget in start.winfo_children():
             widget.destroy()
         
-    def on_key(event, entry, placeholder_text, default_fg):  # Handle the first key press e_raw
-        if entry.get() == placeholder_text:
+    def on_key(event, entry, placeholder_text, default_fg):
+        if event.keysym == "Return":   # Handle the Enter key (Return key)
+            start_save()                                    
+        if entry.get() == placeholder_text:                                                 #- this is broken needs work
             entry.delete(0, tk.END)  # Clear entry
             entry.config(fg=default_fg)
 
 
-# def on_key(event, entry, placeholder_text, default_fg):
-#     # Handle the first key press to clear placeholder text
-#     if entry.get() == placeholder_text:
-#         entry.delete(0, tk.END)  # Clear entry
-#         entry.config(fg=default_fg)                                                   #- this is broken needs work
+    # def on_key(event, entry, pla1 q56ceholder_text, default_fg):
+    #     # Handle the first key press to clear placeholder text
+    #     if entry.get() == placeholder_text:
+    #         entry.delete(0, tk.END)  # Clear entry
+    #         entry.config(fg=default_fg)                                                   #- this is broken needs work
 
 #     #key bindings
 #     if event.keysym == "Return":  # Handle the Enter key (Return key)
@@ -147,6 +156,8 @@ def start():
     start.resizable(False, False)
   
     start.bind("<Button-2>", do_rightclk)  # Bind the right-click event
+    start.bind('<Return>', on_key)
+
 
     placeholder_text = "Enter job number..."
     jbnumraw = tk.StringVar()
