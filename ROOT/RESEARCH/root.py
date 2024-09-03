@@ -6,6 +6,7 @@
 #/                                                                                                               #/
 
 import tkinter as tk
+from tkinter import messagebox
 import re
 
 # Relative Imports
@@ -25,6 +26,11 @@ def prelim():
     JBNUM_RAW = ""                                          # Raw user input from start window entry widget
     current_window = None                                   # Initialize the global variable
 
+def exit(start):
+    # Create a messagebox popup to confirm exit
+    if messagebox.askyesno("Exit", "Are you sure you want to exit?"):
+        start.destroy()  # Exit the program
+
 def start():
     global current_window
     global delay
@@ -36,7 +42,7 @@ def start():
         e_raw.focus_set()
 
     def start_save():                                                                               #- FIX DASH CAPABILITY
-        badchars = re.compile(r'[!@#$%^&*(),.?":{}|<>+=\[\]\\/;\'`~\-]')     # Define unwanted characters
+        badchars = re.compile(r'[!@#$%^&*(),.?":{}|<>+=\[\]\\/;\'`~]')       # Define unwanted characters
         if e_raw.get() == "":                                                         #* fail
             info(current_window, "Entry can not be left blank...")
             focusset()
@@ -96,9 +102,13 @@ def start():
     def on_key(event, entry, placeholder_text, default_fg):
         if event.keysym == "Return":   # Handle the Enter key (Return key)
             start_save()                                    
-        if entry.get() == placeholder_text:                                                 #- this is broken needs work
+        if entry.get() == placeholder_text:
             entry.delete(0, tk.END)  # Clear entry
             entry.config(fg=default_fg)
+        elif event.keysym == 'Escape':                                                      #- takes 2 'escape' to exit... yes/no?
+            exit(start)
+        elif event.keysym == 'a':
+              print("The 'a' key was pressed")
 
 
     # def on_key(event, entry, pla1 q56ceholder_text, default_fg):
@@ -157,6 +167,7 @@ def start():
   
     start.bind("<Button-2>", do_rightclk)  # Bind the right-click event
     start.bind('<Return>', on_key)
+    #start.bind('<Control-c>', _help)  # Ctrl+C key combination
 
 
     placeholder_text = "Enter job number..."
