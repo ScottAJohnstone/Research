@@ -36,7 +36,6 @@ def start():
     global delay
     delay = 3500    # Set the delay for notifications
 
-
     def focusset():
         e_raw.select_range(0, tk.END)
         e_raw.focus_set()
@@ -107,8 +106,8 @@ def start():
             entry.config(fg=default_fg)
         elif event.keysym == 'Escape':                                                      #- takes 2 'escape' to exit... yes/no?
             exit(start)
-        elif event.keysym == 'a':
-              print("The 'a' key was pressed")
+        # elif event.keysym == 'a':
+        #       print("The 'a' key was pressed")
 
 
     # def on_key(event, entry, pla1 q56ceholder_text, default_fg):
@@ -152,7 +151,11 @@ def start():
             rcm.tk_popup(event.x_root, event.y_root)
         finally:
             rcm.grab_release()  # Release the grab when done
-
+    
+    def do_help(event=None):                                                             #- need to figure this out
+        print("help")
+        return "break"  # Prevents the '?' from being entered into the Entry widget
+    
     # Create the main window
     start = tk.Tk()
     start.title("Welcome - Research Log")
@@ -167,6 +170,8 @@ def start():
   
     start.bind("<Button-2>", do_rightclk)  # Bind the right-click event
     start.bind('<Return>', on_key)
+    # start.bind("<Key-?>",do_help)                                                             #- need to figure this out
+
     #start.bind('<Control-c>', _help)  # Ctrl+C key combination
 
 
