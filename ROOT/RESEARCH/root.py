@@ -6,8 +6,10 @@
 #/                                                                                                               #/
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 import re
+import sqlite3
+import webbrowser
 
 # Relative Imports
 from UTILITY import date_time as dt
@@ -25,6 +27,144 @@ def prelim():
     APPENDED_DEFAULT = "NULL"                               # Default file amendment status
     JBNUM_RAW = ""                                          # Raw user input from start window entry widget
     current_window = None                                   # Initialize the global variable
+
+
+def create_db(JBNUM):
+    conn = sqlite3.connect(f'{JBNUM}.res')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS property (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        address TEXT NOT NULL,
+                        city_town TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        parcel_id TEXT NOT NULL)''')
+    conn.commit()
+    conn.close()
+
+def log_property_info(address, city_town, state, parcel_id):
+    conn = sqlite3.connect('property_info.res')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO property (address, city_town, state, parcel_id) VALUES (?, ?, ?, ?)",
+                   (address, city_town, state, parcel_id))
+    conn.commit()
+    conn.close()
+
+def load_city_town_history():
+    conn = sqlite3.connect('property_info.res')
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT city_town FROM property")           #- fix sqlite3.OperationalError: no such table: property
+    history = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return history
+
+def validate_inputs(address, city_town, state, parcel_id):
+    if not address or not city_town or state == "Select State" or not parcel_id:
+        return False
+    return True
+
+def open_google_maps(address, city_town, state):
+    query = f"{address}, {city_town}, {state}"
+    url = f"https://www.google.com/maps/search/?api=1&query={query.replace(' ', '+')}"
+    webbrowser.open(url)
+
+def create_property_recorder_with_maps():
+    # Submit the form data
+    def submit_info():
+        address = address_entry.get()
+        city_town = city_town_entry.get()
+        state = state_combo.get()
+        parcel_id = parcel_id_entry.get()
+
+        if not validate_inputs(address, city_town, state, parcel_id):
+            messagebox.showerror("Error", "All fields must be filled out correctly!")
+        else:
+            log_property_info(address, city_town, state, parcel_id)
+            messagebox.showinfo("Success", "Property information recorded!")
+            clear_form()
+
+    # Clear the form fields
+    def clear_form():
+        address_entry.delete(0, tk.END)
+        city_town_entry.delete(0, tk.END)
+        state_combo.set('Select State')
+        parcel_id_entry.delete(0, tk.END)
+        city_town_entry['values'] = load_city_town_history()
+
+    # Exit the application
+    def exit_app():
+        if messagebox.askyesno("Exit", "Are you sure you want to exit?"):
+            prop.destroy()
+
+    # Initialize the main application window
+    prop = tk.Tk()
+    prop.title("Property Information - Research Log")
+    stht = 325
+    stwi = 475
+    screenht = prop.winfo_screenheight()
+    screenwi = prop.winfo_screenwidth()
+    x = (screenwi / 2) - (stwi / 2)
+    y = (screenht / 2) - (stht / 2)
+    prop.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
+    prop.resizable(False, False)
+    #prop.geometry("400x400")
+
+    # Labels and entry fields for property information
+    tk.Label(prop, text="Address:").pack(pady=5)
+    address_entry = tk.Entry(prop, width=40)
+    address_entry.pack()
+    address_entry.focus_set()
+
+    tk.Label(prop, text="City/Town:").pack(pady=5)
+    city_town_history = load_city_town_history()
+    city_town_entry = ttk.Combobox(prop, values=city_town_history, width=37)
+    city_town_entry.pack()
+
+    tk.Label(prop, text="State:").pack(pady=5)
+    states = ["Select State", "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+              "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+              "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri",
+              "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina",
+              "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina",
+              "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
+              "Wisconsin", "Wyoming"]
+    state_combo = ttk.Combobox(prop, values=states, width=37)
+    state_combo.pack()
+    state_combo.set("Select State")
+
+    tk.Label(prop, text="Parcel ID:").pack(pady=5)
+    parcel_id_entry = tk.Entry(prop, width=40)
+    parcel_id_entry.pack()
+
+    # Frame to hold buttons horizontally
+    button_frame = tk.Frame(prop)
+    button_frame.pack(pady=20)
+
+    # Uniform button width
+    button_width = 8
+    pad_x = 2
+
+    # Submit button
+    submit_button = tk.Button(button_frame, text="Submit", command=submit_info, width=button_width)
+    submit_button.pack(side=tk.LEFT, padx=pad_x)
+
+    # Button to open the address in Google Maps
+    maps_button = tk.Button(button_frame, text="Open in Maps",
+                            command=lambda: open_google_maps(address_entry.get(), city_town_entry.get(), state_combo.get()),
+                            width=button_width)
+    maps_button.pack(side=tk.LEFT, padx=pad_x)
+
+    # Clear button to reset the form
+    clear_button = tk.Button(button_frame, text="Clear", command=clear_form, width=button_width)
+    clear_button.pack(side=tk.LEFT, padx=pad_x)
+
+    # Exit button to close the application
+    exit_button = tk.Button(button_frame, text="Exit", command=exit_app, width=button_width)
+    exit_button.pack(side=tk.LEFT, padx=pad_x)
+
+    prop.mainloop()
+
+
+
 
 def exit(start):
     # Create a messagebox popup to confirm exit
@@ -63,6 +203,9 @@ def start():
                 focusset()
                 JBNUM = e_raw.get()
                 DASH=""
+                create_db(JBNUM)
+                create_property_recorder_with_maps()
+
             elif "-" in e_raw.get():
                 JBNUM, DASH = e_raw.get().split("-")                                   
                 if JBNUM == "":                                                    #* fail
@@ -74,6 +217,8 @@ def start():
                 else:                                                              #* pass
                     def yes():
                         start_destroy()
+                        create_db(JBNUM)
+                        create_property_recorder_with_maps()
                     def no():
                         focusset()
                         f_info.destroy()
@@ -86,14 +231,17 @@ def start():
                 DASH = re.sub(r'\d+', '', e_raw.get())
                 def yes():
                     start_destroy()
+                    create_db(JBNUM)
+                    create_property_recorder_with_maps()
+                    
+
                 def no():
                     f_info.destroy()
                     f_btn.destroy()
                 JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
                 print(JBNUM)
                 print(DASH)
-                info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)
-   
+                info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)   
     def start_destroy():  # Remove all existing widgets
         for widget in start.winfo_children():
             widget.destroy()
@@ -106,29 +254,6 @@ def start():
             entry.config(fg=default_fg)
         elif event.keysym == 'Escape':                                                      #- takes 2 'escape' to exit... yes/no?
             exit(start)
-        # elif event.keysym == 'a':
-        #       print("The 'a' key was pressed")
-
-
-    # def on_key(event, entry, pla1 q56ceholder_text, default_fg):
-    #     # Handle the first key press to clear placeholder text
-    #     if entry.get() == placeholder_text:
-    #         entry.delete(0, tk.END)  # Clear entry
-    #         entry.config(fg=default_fg)                                                   #- this is broken needs work
-
-#     #key bindings
-#     if event.keysym == "Return":  # Handle the Enter key (Return key)
-#         print("Enter key pressed - submit action")
-#         # You can add a call to a submit function here
-#     elif event.keysym == "Escape":  # Handle the Escape key
-#         print("Escape key pressed - cancel action")
-#         entry.delete(0, tk.END)  # Clear entry or perform another action
-#     elif event.keysym == "F1":  # Handle the F1 key
-#         print("F1 key pressed - show help")
-#         # Call a function to show help or any other task
-
-#     # Add more key bindings as needed
-
 
     def placeholder(entry, placeholder_text="Enter job number...", placeholder_fg='grey', default_fg='white'):  # Create an Entry & placeholder
         entry.insert(0, placeholder_text)
