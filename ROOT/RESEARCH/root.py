@@ -5,11 +5,20 @@
 #/                                                                                                               #/
 #/                                                                                                               #/
 
+#- fix history
+
+
+
+
+
+
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import re
 import sqlite3
 import webbrowser
+import os
 
 # Relative Imports
 from UTILITY import date_time as dt
@@ -20,6 +29,7 @@ def prelim():
     global current_window
     TODAY = dt.TODAY
     CDATE = f'{TODAY}'                                      # Current Date
+    NM='SAJ'
     USR = o.usr                                             # Computer User
     COM_COUNTER = 1                                         # -Find out what this was used for
     DELAY_DEFAULT = 2500                                    # Default delay for Notifications
@@ -28,34 +38,48 @@ def prelim():
     JBNUM_RAW = ""                                          # Raw user input from start window entry widget
     current_window = None                                   # Initialize the global variable
 
-
 def create_db(JBNUM):
-    conn = sqlite3.connect(f'{JBNUM}.res')
+    conn = sqlite3.connect(f'{JBNUM}.res')  # Create the database file if it does not exist
     cursor = conn.cursor()
+    
+    # Create the table only if it does not exist
     cursor.execute('''CREATE TABLE IF NOT EXISTS property (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         address TEXT NOT NULL,
                         city_town TEXT NOT NULL,
                         state TEXT NOT NULL,
                         parcel_id TEXT NOT NULL)''')
+    
     conn.commit()
     conn.close()
 
-def log_property_info(address, city_town, state, parcel_id):
-    conn = sqlite3.connect('property_info.res')
+def log_property_info(JBNUM, address, city_town, state, parcel_id, db_file):
+    conn = sqlite3.connect(db_file)  # Connect to the specified database file
     cursor = conn.cursor()
     cursor.execute("INSERT INTO property (address, city_town, state, parcel_id) VALUES (?, ?, ?, ?)",
                    (address, city_town, state, parcel_id))
     conn.commit()
     conn.close()
 
-def load_city_town_history():
-    conn = sqlite3.connect('property_info.res')
+def load_history(history_type):
+    db_file = 'SAJHIST.db'
+    if not os.path.isfile(db_file):
+        return []
+    conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT city_town FROM property")           #- fix sqlite3.OperationalError: no such table: property
+    if history_type == "city_town":
+        cursor.execute("SELECT DISTINCT city_town FROM property")
+    elif history_type == "address":
+        cursor.execute("SELECT DISTINCT address FROM property")
+    elif history_type == "parcel_id":
+        cursor.execute("SELECT DISTINCT parcel_id FROM property")
+    else:
+        return []
     history = [row[0] for row in cursor.fetchall()]
     conn.close()
     return history
+
+
 
 def validate_inputs(address, city_town, state, parcel_id):
     if not address or not city_town or state == "Select State" or not parcel_id:
@@ -67,8 +91,7 @@ def open_google_maps(address, city_town, state):
     url = f"https://www.google.com/maps/search/?api=1&query={query.replace(' ', '+')}"
     webbrowser.open(url)
 
-def create_property_recorder_with_maps():
-    # Submit the form data
+def prop(JBNUM):
     def submit_info():
         address = address_entry.get()
         city_town = city_town_entry.get()
@@ -78,22 +101,23 @@ def create_property_recorder_with_maps():
         if not validate_inputs(address, city_town, state, parcel_id):
             messagebox.showerror("Error", "All fields must be filled out correctly!")
         else:
-            log_property_info(address, city_town, state, parcel_id)
+            create_db(JBNUM)
+            log_property_info(JBNUM, address, city_town, state, parcel_id, f'{JBNUM}.res')
+            log_property_info(JBNUM, address, city_town, state, parcel_id, 'SAJHIST.db')
             messagebox.showinfo("Success", "Property information recorded!")
             clear_form()
 
-    # Clear the form fields
     def clear_form():
-        address_entry.delete(0, tk.END)
-        city_town_entry.delete(0, tk.END)
+        # Clear and update combobox values
+        address_entry.set('')  
+        city_town_entry.set('')  
         state_combo.set('Select State')
-        parcel_id_entry.delete(0, tk.END)
-        city_town_entry['values'] = load_city_town_history()
+        parcel_id_entry.set('')  
 
-    # Exit the application
-    def exit_app():
-        if messagebox.askyesno("Exit", "Are you sure you want to exit?"):
-            prop.destroy()
+        # Update comboboxes with the latest history
+        address_entry['values'] = load_history("address")
+        city_town_entry['values'] = load_history("city_town")
+        parcel_id_entry['values'] = load_history("parcel_id")
 
     # Initialize the main application window
     prop = tk.Tk()
@@ -106,17 +130,14 @@ def create_property_recorder_with_maps():
     y = (screenht / 2) - (stht / 2)
     prop.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
     prop.resizable(False, False)
-    #prop.geometry("400x400")
 
     # Labels and entry fields for property information
     tk.Label(prop, text="Address:").pack(pady=5)
-    address_entry = tk.Entry(prop, width=40)
+    address_entry = ttk.Combobox(prop, values=load_history("address"), width=37)
     address_entry.pack()
-    address_entry.focus_set()
 
     tk.Label(prop, text="City/Town:").pack(pady=5)
-    city_town_history = load_city_town_history()
-    city_town_entry = ttk.Combobox(prop, values=city_town_history, width=37)
+    city_town_entry = ttk.Combobox(prop, values=load_history("city_town"), width=37)
     city_town_entry.pack()
 
     tk.Label(prop, text="State:").pack(pady=5)
@@ -132,7 +153,7 @@ def create_property_recorder_with_maps():
     state_combo.set("Select State")
 
     tk.Label(prop, text="Parcel ID:").pack(pady=5)
-    parcel_id_entry = tk.Entry(prop, width=40)
+    parcel_id_entry = ttk.Combobox(prop, values=load_history("parcel_id"), width=37)
     parcel_id_entry.pack()
 
     # Frame to hold buttons horizontally
@@ -158,11 +179,10 @@ def create_property_recorder_with_maps():
     clear_button.pack(side=tk.LEFT, padx=pad_x)
 
     # Exit button to close the application
-    exit_button = tk.Button(button_frame, text="Exit", command=exit_app, width=button_width)
+    exit_button = tk.Button(button_frame, text="Exit", command=terminate, width=button_width)
     exit_button.pack(side=tk.LEFT, padx=pad_x)
 
     prop.mainloop()
-
 
 
 
@@ -180,7 +200,7 @@ def start():
         e_raw.select_range(0, tk.END)
         e_raw.focus_set()
 
-    def start_save():                                                                               #- FIX DASH CAPABILITY
+    def start_save():         
         badchars = re.compile(r'[!@#$%^&*(),.?":{}|<>+=\[\]\\/;\'`~]')       # Define unwanted characters
         if e_raw.get() == "":                                                         #* fail
             info(current_window, "Entry can not be left blank...")
@@ -203,8 +223,8 @@ def start():
                 focusset()
                 JBNUM = e_raw.get()
                 DASH=""
-                create_db(JBNUM)
-                create_property_recorder_with_maps()
+                start_destroy()
+                prop(JBNUM)
 
             elif "-" in e_raw.get():
                 JBNUM, DASH = e_raw.get().split("-")                                   
@@ -217,8 +237,7 @@ def start():
                 else:                                                              #* pass
                     def yes():
                         start_destroy()
-                        create_db(JBNUM)
-                        create_property_recorder_with_maps()
+                        prop(JBNUM)
                     def no():
                         focusset()
                         f_info.destroy()
@@ -231,16 +250,12 @@ def start():
                 DASH = re.sub(r'\d+', '', e_raw.get())
                 def yes():
                     start_destroy()
-                    create_db(JBNUM)
-                    create_property_recorder_with_maps()
-                    
-
+                    prop(JBNUM)
                 def no():
                     f_info.destroy()
                     f_btn.destroy()
                 JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
-                print(JBNUM)
-                print(DASH)
+                prop(JBNUM)
                 info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)   
     def start_destroy():  # Remove all existing widgets
         for widget in start.winfo_children():
@@ -252,7 +267,7 @@ def start():
         if entry.get() == placeholder_text:
             entry.delete(0, tk.END)  # Clear entry
             entry.config(fg=default_fg)
-        elif event.keysym == 'Escape':                                                      #- takes 2 'escape' to exit... yes/no?
+        elif event.keysym == 'Escape':                                                      # takes 2 'escape' to exit... yes/no?
             exit(start)
 
     def placeholder(entry, placeholder_text="Enter job number...", placeholder_fg='grey', default_fg='white'):  # Create an Entry & placeholder
@@ -277,7 +292,7 @@ def start():
         finally:
             rcm.grab_release()  # Release the grab when done
     
-    def do_help(event=None):                                                             #- need to figure this out
+    def do_help(event=None):                                                             # need to figure this out
         print("help")
         return "break"  # Prevents the '?' from being entered into the Entry widget
     
@@ -295,7 +310,7 @@ def start():
   
     start.bind("<Button-2>", do_rightclk)  # Bind the right-click event
     start.bind('<Return>', on_key)
-    # start.bind("<Key-?>",do_help)                                                             #- need to figure this out
+    # start.bind("<Key-?>",do_help)                                                             # need to figure this out
 
     #start.bind('<Control-c>', _help)  # Ctrl+C key combination
 
@@ -321,7 +336,7 @@ def start():
     start.mainloop()
 
 def init():
-    print(JBNUM_RAW)                                           #- Need to complete
+    print(JBNUM_RAW)                                           # Need to complete
     
 def terminate():
     global current_window

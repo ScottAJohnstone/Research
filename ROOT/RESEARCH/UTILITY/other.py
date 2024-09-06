@@ -7,5 +7,4 @@ def fullpath(path):
 
 def usr():
     computer_name = socket.gethostname()
-    print("Computer Name:", computer_name)
 usr()
