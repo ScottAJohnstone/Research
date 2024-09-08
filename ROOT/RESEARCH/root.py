@@ -119,10 +119,10 @@ def prop_maps(address, city_town, state):
 
 def prop(JBNUM):
     def submit_info():
-        address = address_entry.get()
-        city_town = city_town_entry.get()
-        state = state_combo.get()
-        parcel_id = parcel_id_entry.get()
+        address = e_addy.get()
+        city_town = e_town.get()
+        state = e_state.get()
+        parcel_id = e_pid.get()
 
         if not prop_validate(address, city_town, state, parcel_id):
             messagebox.showerror("Error", "All fields must be filled out correctly!")
@@ -166,9 +166,9 @@ def prop(JBNUM):
                     cursor.execute("DELETE FROM property")
                     conn.commit()
                 # Clear the values in the combo boxes
-                address_entry['values'] = []
-                city_town_entry['values'] = []
-                parcel_id_entry['values'] = []
+                e_addy['values'] = []
+                e_town['values'] = []
+                e_pid['values'] = []
                 messagebox.showinfo("Success", "History cleared successfully!")
             except sqlite3.Error as e:
                 print(f"Database error: {e}")
@@ -232,7 +232,7 @@ def prop(JBNUM):
     # Button to open the address in Google Maps
     b_map = tk.Button(f_btn, text="Open in Maps",
                             command=lambda: prop_maps
-                        (address_entry.get(), city_town_entry.get(), state_combo.get()),
+                        (e_addy.get(), e_town.get(), e_state.get()),
                             width=button_width)
     b_map.pack(side=tk.LEFT, padx=pad_x)
 
