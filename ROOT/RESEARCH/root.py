@@ -290,7 +290,7 @@ def start():
         elif e_raw.get().isalpha():                                                     #* fail
             info(current_window, "Please enter a number...")
             focusset()
-        elif badchars.search(e_raw.get()):                                          #* fail     
+        elif badchars.search(e_raw.get()):                                              #* fail
             info(current_window, "The only special character allowed is a hyphen...")
             focusset()
         else:
@@ -300,9 +300,7 @@ def start():
                 JBNUM = e_raw.get()
                 DASH=""
                 start.destroy()
-
                 prop(JBNUM)
-
             elif "-" in e_raw.get():
                 JBNUM, DASH = e_raw.get().split("-")                                   
                 if JBNUM == "":                                                    #* fail
@@ -336,10 +334,10 @@ def start():
                 info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)   
             
     def on_key(event, entry, placeholder_text, default_fg):
-        if event.keysym == "Return":   # Handle the Enter key (Return key)
+        if event.keysym == "Return":   # Handle the Enter key
             start_save()                                    
         if entry.get() == placeholder_text:
-            entry.delete(0, tk.END)  # Clear entry
+            entry.delete(0, tk.END)
             entry.config(fg=default_fg)
         elif event.keysym == 'Escape':                                                      # takes 2 'escape' to exit... yes/no?
             exit(start)
@@ -445,10 +443,12 @@ def info(window, text, show_buttons=False, yes_command=None, no_command=None):
         f_btn = tk.Frame(f_info)
         f_btn.pack(side=tk.BOTTOM)
 
-        b_y = tk.Button(f_btn, text="Yes", width=5, command=lambda: [l_inf.destroy(), yes_command()])
+        b_y = tk.Button(f_btn, text="Yes", width=5, command=lambda: [l_inf.destroy()]) #b_y = tk.Button(f_btn, text="Yes", width=5, command=lambda: [l_inf.destroy(), yes_command()])
+
         b_y.pack(side=tk.RIGHT, padx=(1,0))
 
-        b_n = tk.Button(f_btn, text="No", width=5, command=lambda: [l_inf.destroy(), no_command()])
+        b_n = tk.Button(f_btn, text="No", width=5, command=lambda: [l_inf.destroy()]) #b_n = tk.Button(f_btn, text="No", width=5, command=lambda: [l_inf.destroy(), no_command()])
+
         b_n.pack(side=tk.LEFT, anchor=tk.SE, padx=(1,0))
 
     window.update_idletasks()  # Force the window to update its display
