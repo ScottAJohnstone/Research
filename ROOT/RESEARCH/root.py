@@ -13,12 +13,13 @@
 from curses import window
 from curses.ascii import FF
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import re
 import sqlite3
 import webbrowser
 import os
 from idlelib.tooltip import Hovertip
+import socket
 
 # Relative Imports
 from UTILITY import date_time as dt
@@ -370,6 +371,29 @@ def start():
     start.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
     start.resizable(False, False)
 
+    def feedback(feedback_type):
+        # Get the current date and time
+        current_time = dt.TODAY#datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Get the computer name
+        computer_name = socket.gethostname()
+        
+        # Create a simple dialog to get user input
+        feedback = simpledialog.askstring("Feedback", f"Please leave a brief description of your {feedback_type}:")
+        
+        if feedback:
+            # Define the log file name
+            log_file = "Feedback.txt"
+            
+            # Append the feedback to the log file with date, time, and computer name
+            with open(log_file, "a") as f:
+                f.write(f"{current_time} | {computer_name} | {feedback_type.capitalize()}: {feedback}\n")
+            
+            # Show a confirmation message
+            messagebox.showinfo("Submission Successful", f"Your {feedback_type} has been submitted.")
+        else:
+            messagebox.showwarning("No Input", "You must enter a feedback before submitting.")
+
     def start_do_rightclk(event):
         rcm = tk.Menu(start, tearoff=0)  # Create a context menu
         rcm.add_command(label="Cut", command=lambda: print("Cut selected"))                             #-Add function in all windows
@@ -378,9 +402,10 @@ def start():
         rcm.add_separator()
         rcm.add_command(label="Jump to Network", command=lambda: print("Jumping"))
         rcm.add_separator()
+        rcm.add_command(label="Report an Error", command=lambda: feedback("error"))
+        rcm.add_command(label="Leave a Comment", command=lambda: feedback("comment"))
+        rcm.add_separator()
         rcm.add_command(label="Exit", command=rcm.destroy)
-
-
         
         # Display the menu at the mouse cursor position
         try:
@@ -417,7 +442,6 @@ def start():
     b_close_Tip = Hovertip(b_close,'Start Research: \nHotkey = [Esc x2]')
 
     start.mainloop()
-
 
 def init():
     print(JBNUM_RAW)                                           # Need to complete

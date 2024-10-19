@@ -1,56 +1,42 @@
 import tkinter as tk
+from tkinter import simpledialog, messagebox
+import os
+import socket
+from datetime import datetime
 
-def cut_text(event=None):
-    try:
-        # Check if there's a selection and cut the selected text
-        window.clipboard_clear()
-        selected_text = text_area.get("sel.first", "sel.last")
-        window.clipboard_append(selected_text)
-        text_area.delete("sel.first", "sel.last")
-    except tk.TclError:
-        pass  # If nothing is selected, do nothing
+def feedback(feedback_type):
+    # Get the current date and time
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Get the computer name
+    computer_name = socket.gethostname()
+    
+    # Create a simple dialog to get user input
+    feedback = simpledialog.askstring("Feedback", f"Please enter your {feedback_type}:")
+    
+    if feedback:
+        # Define the log file name
+        log_file = "Feedback.txt"
+        
+        # Append the feedback to the log file with date, time, and computer name
+        with open(log_file, "a") as f:
+            f.write(f"{current_time} | {computer_name} | {feedback_type.capitalize()}: {feedback}\n")
+        
+        # Show a confirmation message
+        messagebox.showinfo("Submission Successful", f"Your {feedback_type} has been submitted.")
+    else:
+        messagebox.showwarning("No Input", "You must enter a feedback before submitting.")
 
-def copy_text(event=None):
-    try:
-        # Check if there's a selection and copy the selected text
-        window.clipboard_clear()
-        selected_text = text_area.get("sel.first", "sel.last")
-        window.clipboard_append(selected_text)
-    except tk.TclError:
-        pass  # If nothing is selected, do nothing
+# Sample usage in a Tkinter window
+def feedbackwindow(window):
+    error_button = tk.Button(window, text="Report Error", command=lambda: feedback("error"))
+    error_button.pack(pady=10)
 
-def paste_text(event=None):
-    try:
-        # Get the clipboard content and insert it at the current cursor position
-        cursor_position = text_area.index(tk.INSERT)
-        clipboard_text = window.clipboard_get()
-        text_area.insert(cursor_position, clipboard_text)
-    except tk.TclError:
-        pass  # If the clipboard is empty, do nothing
+    comment_button = tk.Button(window, text="Add Comment", command=lambda: feedback("comment"))
+    comment_button.pack(pady=10)
 
-# Create the main window
-window = tk.Tk()
-window.geometry("400x300")
-
-# Create a text widget
-text_area = tk.Text(window, wrap="word")
-text_area.pack(expand=True, fill="both")
-
-# Add cut, copy, and paste commands to the context menu
-context_menu = tk.Menu(window, tearoff=0)
-context_menu.add_command(label="Cut", command=cut_text)
-context_menu.add_command(label="Copy", command=copy_text)
-context_menu.add_command(label="Paste", command=paste_text)
-
-# Right-click menu binding
-def show_context_menu(event):
-    context_menu.post(event.x_root, event.y_root)
-
-text_area.bind("<Button-3>", show_context_menu)
-
-# Bind keyboard shortcuts for cut, copy, and paste
-window.bind("<Control-x>", cut_text)
-window.bind("<Control-c>", copy_text)
-window.bind("<Control-v>", paste_text)
-
-window.mainloop()
+if __name__ == "__main__":
+    window = tk.Tk()
+    window.title("Feedback System")
+    feedbackwindow(window)
+    window.mainloop()
