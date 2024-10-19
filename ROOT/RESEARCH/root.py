@@ -10,6 +10,8 @@
 
 
 
+from curses import window
+from curses.ascii import FF
 import tkinter as tk
 from tkinter import ttk, messagebox
 import re
@@ -137,7 +139,7 @@ def prop(JBNUM):
         # Clear and update combobox values
         e_addy.set('')  
         e_town.set('')  
-        #state_combo.set('Select State')
+        e_state.set('')
         e_pid.set('')  
 
         # Update comboboxes with the latest history
@@ -249,9 +251,6 @@ def prop(JBNUM):
     b_clear_Tip = Hovertip(b_clear,'Clear Contents: \nHotkey = [cntrl + X]')                              # - work on help command/shortcut
     b_exit_Tip = Hovertip(b_exit,'Exit: \n[Hotkey = [Esc]')
 
-
-
-
     prop.mainloop()
 
 
@@ -272,7 +271,12 @@ def start():
 
     def start_save():         
         badchars = re.compile(r'[!@#$%^&*(),.":{}|<>+=\[\]\\/;\'`~]')       # Define unwanted characters
-        if e_raw.get() == "":                                                           #* fail
+        if e_raw.get() == "SAJ":
+            info(current_window, text=None, Settings=True)
+            info(current_window, "")
+            #print("Scott add Settings")
+            focusset()
+        elif e_raw.get() == "":                                                           #* fail
             info(current_window, "Entry can not be left blank...")
             focusset()
         elif e_raw.get() == "Enter job number...":                                      #* fail
@@ -331,7 +335,7 @@ def start():
                     f_btn.destroy()
                 JBNUM = re.sub(r'[a-zA-Z]', '', JBNUM)
                 prop(JBNUM)
-                info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)   
+                info(current_window, text=f'Please confirm base job number [{JBNUM}]...', show_buttons=True, yes_command=yes, no_command=no)
             
     def on_key(event, entry, placeholder_text, default_fg):
         if event.keysym == "Return":   # Handle the Enter key
@@ -368,11 +372,15 @@ def start():
 
     def start_do_rightclk(event):
         rcm = tk.Menu(start, tearoff=0)  # Create a context menu
-        rcm.add_command(label="Cut", command=lambda: print("Cut selected"))
-        rcm.add_command(label="Copy", command=lambda: print("Copy selected"))
-        rcm.add_command(label="Paste", command=lambda: print("Paste selected"))
+        rcm.add_command(label="Cut", command=lambda: print("Cut selected"))                             #-Add function in all windows
+        rcm.add_command(label="Copy", command=lambda: print("Copy selected"))                           #-Add function in all windows
+        rcm.add_command(label="Paste", command=lambda: print("Paste selected"))                         #-Add function in all windows
         rcm.add_separator()
         rcm.add_command(label="Jump to Network", command=lambda: print("Jumping"))
+        rcm.add_separator()
+        rcm.add_command(label="Exit", command=rcm.destroy)
+
+
         
         # Display the menu at the mouse cursor position
         try:
@@ -381,7 +389,7 @@ def start():
             rcm.grab_release()  # Release the grab when done
   
     start.bind("<Button-2>", start_do_rightclk)  # Bind the right-click event
-    start.bind('<Return>', on_key)
+    #start.bind('<Return>', on_key)                                              #! fix
 
 
     placeholder_text = "Enter job number..."
@@ -390,6 +398,7 @@ def start():
     # Create a frame for the info label
     f_info = tk.Frame(start)
     f_info.pack(side=tk.BOTTOM, fill=tk.X)
+    f_info.lift()
 
     current_window = start
 
@@ -420,8 +429,7 @@ def terminate():
         current_window.destroy()  # Close the window
         current_window = None  # Reset the reference
 
-
-def info(window, text, show_buttons=False, yes_command=None, no_command=None):
+def info(window, text, show_buttons=False, Settings=False, yes_command=None, no_command=None):
     global delay
     global f_btn
 
@@ -450,6 +458,34 @@ def info(window, text, show_buttons=False, yes_command=None, no_command=None):
         b_n = tk.Button(f_btn, text="No", width=5, command=lambda: [l_inf.destroy()]) #b_n = tk.Button(f_btn, text="No", width=5, command=lambda: [l_inf.destroy(), no_command()])
 
         b_n.pack(side=tk.LEFT, anchor=tk.SE, padx=(1,0))
+
+    if Settings:
+
+
+        def SettingsMenu(event):
+            # Create the popup menu
+            Settings_menu = tk.Menu(window, tearoff=0)
+            Settings_menu.add_command(label="Configure", command=lambda: print("Option 2 selected"))                    #- Add Settings
+            Settings_menu.add_command(label="Clear History", command=lambda: print("Option 2 selected"))               #- Add Settings
+
+            Settings_menu.add_separator()
+            Settings_menu.add_command(label="Exit", command=Settings_menu.destroy)
+
+            # Show the Settings menu at the cursor's location
+            Settings_menu.post(event.x_root, event.y_root)
+
+        f_btn = tk.Frame(window)
+        f_btn.pack(side=tk.BOTTOM)
+        f_btn.lower()
+        f_btn.config(width=6, height=2)
+        b_Settings = tk.Button(f_btn, text="Settings", width=5)
+        b_Settings.pack()
+        b_Settings.bind("<Button-1>", SettingsMenu)
+
+
+
+
+    
 
     window.update_idletasks()  # Force the window to update its display
 
