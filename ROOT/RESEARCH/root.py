@@ -136,7 +136,7 @@ def prop(JBNUM):
             messagebox.showinfo("Success", "Property information recorded!")
             clear_form()
 
-    def clear_form():
+    def clear_form(event=None):
         # Clear and update combobox values
         e_addy.set('')  
         e_town.set('')  
@@ -194,6 +194,8 @@ def prop(JBNUM):
             rcm.grab_release()  # Release the grab when done
   
     prop.bind("<Button-2>", prop_do_rightclk)  # Bind the right-click event
+    prop.bind("<Control-BackSpace>", clear_form)
+
 
     # Labels and entry fields for property information
     tk.Label(prop, text="Address:").pack(pady=5)
@@ -249,16 +251,16 @@ def prop(JBNUM):
 
     b_submit_Tip = Hovertip(b_submit,'Hotkey = [Enter]')
     b_map_Tip = Hovertip(b_map,'Open in Google Maps: \nHotkey = [cntrl + M]')
-    b_clear_Tip = Hovertip(b_clear,'Clear Contents: \nHotkey = [cntrl + X]')                              # - work on help command/shortcut
+    b_clear_Tip = Hovertip(b_clear,'Clear Contents: \nHotkey = [cntrl + Backspace]')                              # - work on help command/shortcut
     b_exit_Tip = Hovertip(b_exit,'Exit: \n[Hotkey = [Esc]')
 
     prop.mainloop()
 
 
-def exit(start):
+def exit(window):
     # Create a messagebox popup to confirm exit
     if messagebox.askyesno("Exit", "Are you sure you want to exit?"):
-        start.destroy()  # Exit the program
+        window.destroy()  # Exit the program
 
 
 def start():
@@ -462,12 +464,12 @@ def info(window, text, show_buttons=False, Settings=False, yes_command=None, no_
         if isinstance(widget, tk.Frame):
             f_info = widget
             break
-    else:
-        f_info = tk.Frame(window)
-        f_info.pack(side=tk.BOTTOM, fill=tk.X)
+        else:
+            f_info = tk.Frame(window)
+            f_info.pack(side=tk.BOTTOM, fill=tk.X)
 
-    # Create the info label and add it to the frame
-    l_inf = tk.Label(f_info, text=text, font=('Helvetica', 10))
+    # Create the info label and add it to the frame                                     
+    l_inf = tk.Label(f_info, text=text, font=('Helvetica', 10))                                 #! fix duplicates info labels here
     l_inf.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=(0, 5))
 
     if show_buttons:
@@ -505,11 +507,6 @@ def info(window, text, show_buttons=False, Settings=False, yes_command=None, no_
         b_Settings = tk.Button(f_btn, text="Settings", width=5)
         b_Settings.pack()
         b_Settings.bind("<Button-1>", SettingsMenu)
-
-
-
-
-    
 
     window.update_idletasks()  # Force the window to update its display
 
