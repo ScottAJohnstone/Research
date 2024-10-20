@@ -114,7 +114,7 @@ def prop_validate(address, city_town, state, parcel_id):
     return True
 
 
-def prop_maps(address, city_town, state):
+def prop_maps(address, city_town, state,event=None):
     query = f"{address}, {city_town}, {state}"
     url = f"https://www.google.com/maps/search/?api=1&query={query.replace(' ', '+')}"
     webbrowser.open(url)
@@ -195,6 +195,8 @@ def prop(JBNUM):
   
     prop.bind("<Button-2>", prop_do_rightclk)  # Bind the right-click event
     prop.bind("<Control-BackSpace>", clear_form)
+    #prop.bind("<Control-m>", prop_maps)                                                                    #! fix
+
 
 
     # Labels and entry fields for property information
@@ -235,9 +237,7 @@ def prop(JBNUM):
     b_submit.pack(side=tk.LEFT, padx=pad_x)
 
     # Button to open the address in Google Maps
-    b_map = tk.Button(f_btn, text="Open in Maps",
-                            command=lambda: prop_maps
-                        (e_addy.get(), e_town.get(), e_state.get()),
+    b_map = tk.Button(f_btn, text="Open in Maps",command=lambda: prop_maps(e_addy.get(), e_town.get(), e_state.get()),
                             width=button_width)
     b_map.pack(side=tk.LEFT, padx=pad_x)
 
