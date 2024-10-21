@@ -44,8 +44,8 @@ class LandRecordOrganizer:
         self.edit_button.pack(side="left", padx=5)
         
         # Treeview for displaying records
-        self.tree = ttk.Treeview(self.tab1, columns=("UUID", "Document", "Comments"), show="headings")
-        self.tree.heading("UUID", text="UUID")
+        self.tree = ttk.Treeview(self.tab1, columns=("Document", "Comments"), show="tree")
+        self.tree.heading("#0", text="UUID")  # Setting the first column for UUID
         self.tree.heading("Document", text="Document Name")
         self.tree.heading("Comments", text="Comments")
         self.tree.pack(expand=True, fill="both")
@@ -74,15 +74,25 @@ class LandRecordOrganizer:
         comments = self.comments_text.get("1.0", tk.END).strip()
         uuid_value = self.generate_uuid()
         
-        self.tree.insert("", "end", iid=uuid_value, values=(uuid_value, doc_name, comments))
-        
-        # Automatically expand parent if it's a child
-        if '.' in uuid_value:
+        # Collapse all items before adding a new record
+        self.collapse_all_items()
+
+        # Insert the new record
+        if '.' in uuid_value:  # Child item
             parent_uuid = '.'.join(uuid_value.split('.')[:-1])
-            self.tree.item(parent_uuid, open=True)
+            self.tree.insert(parent_uuid, "end", iid=uuid_value, text=uuid_value, values=(doc_name, comments))
+        else:  # Root item
+            self.tree.insert("", "end", iid=uuid_value, text=uuid_value, values=(doc_name, comments))
         
+        # Automatically expand parent if it's a child                                               #- is this still needed
+        if '.' in uuid_value:
+            self.tree.item(parent_uuid, open=True)
+
+        # Expand only the current selected item
+        if self.current_selected_uuid:
+            self.tree.item(self.current_selected_uuid, open=True)
+
         self.sort_treeview()  # Sort items after adding a record
-        self.expand_all_items()  # Expand all items to make sure everything is visible
         
         # Clear the input fields
         self.document_entry.delete(0, tk.END)
@@ -90,6 +100,19 @@ class LandRecordOrganizer:
         
         if not self.current_selected_uuid:
             self.root_uuid += 1
+
+    def collapse_all_items(self):
+        """Collapse all items in the Treeview."""
+        for item in self.tree.get_children():
+            self.tree.item(item, open=False)
+            self._collapse_children(item)
+
+    def _collapse_children(self, item):
+        """Recursively collapse all child items."""
+        children = self.tree.get_children(item)
+        for child in children:
+            self.tree.item(child, open=False)
+            self._collapse_children(child)
 
     def remove_record(self):
         selected_item = self.tree.selection()
@@ -102,7 +125,7 @@ class LandRecordOrganizer:
         if selected_item:
             doc_name = self.document_entry.get()
             comments = self.comments_text.get("1.0", tk.END).strip()
-            self.tree.item(selected_item, values=(selected_item[0], doc_name, comments))
+            self.tree.item(selected_item, values=(doc_name, comments))
         
     def on_treeview_select(self, event):
         selected_item = self.tree.selection()
@@ -125,17 +148,6 @@ class LandRecordOrganizer:
                 recursive_sort(child)  # Sort the children recursively
 
         recursive_sort()
-
-    def expand_all_items(self):
-        for item in self.tree.get_children():
-            self.tree.item(item, open=True)
-            self._expand_children(item)
-
-    def _expand_children(self, item):
-        children = self.tree.get_children(item)
-        for child in children:
-            self.tree.item(child, open=True)
-            self._expand_children(child)
 
 if __name__ == "__main__":
     root = tk.Tk()

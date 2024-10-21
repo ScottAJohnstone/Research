@@ -1,169 +1,199 @@
 import tkinter as tk
-import re
+from tkinter import ttk
 
-# Relative Imports
-from UTILITY import date_time as dt
-from UTILITY import other as o
+class LandRecordOrganizer:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Land Record Research Organizer")
+        
+        # Setting up the notebook (tabs)
+        self.notebook = ttk.Notebook(self.root)
+        self.tab1 = ttk.Frame(self.notebook)
+        self.tab2 = ttk.Frame(self.notebook)
+        self.tab3 = ttk.Frame(self.notebook)
+        self.tab4 = ttk.Frame(self.notebook)
+        
+        self.notebook.add(self.tab1, text="Records")
+        self.notebook.add(self.tab2, text="Tab 2")
+        self.notebook.add(self.tab3, text="Tab 3")
+        self.notebook.add(self.tab4, text="Tab 4")
+        self.notebook.pack(expand=True, fill="both")
+        
+        # UUID tracking
+        self.root_uuid = 1
+        self.current_selected_uuid = None
 
-def prelim():
-    global JBNUM_RAW
-    global current_window
-    # Set Constants
-    TODAY = dt.TODAY
-    CDATE = f'{TODAY}'                                      # Current Date
-    USR = o.usr                                             # Computer User
-    COM_COUNTER = 1                                         # -Find out what this was used for
-    DELAY_DEFAULT = 2500                                    # Default delay for Notifications
-    FOCUS_DEFAULT = "[SUBJECT]"                             # Default property focus [subject or abutter]
-    APPENDED_DEFAULT = "NULL"                               # Default file amendment status
-    JBNUM_RAW = ""                                          # Raw user input from start window entry widget
-    current_window = None                                   # Initialize the global variable
+        # Widgets for the first tab
+        self.setup_tab1()
 
-def start():
-    global current_window
-    global delay
-    delay = 2500  # Set the delay for notifications
+    def setup_tab1(self):
+        # Frame for entries
+        entry_frame = ttk.Frame(self.tab1)
+        entry_frame.pack(pady=5)
 
-    def start_save():  # Save
-        value = e_raw.get().strip()  # Get and strip any surrounding whitespace
+        # Entry for document name with placeholder
+        self.document_entry = ttk.Entry(entry_frame, width=30)
+        self.document_entry.insert(0, "Enter Document Name")
+        self.document_entry.bind("<FocusIn>", self.clear_placeholder)
+        self.document_entry.bind("<FocusOut>", self.set_placeholder)
+        self.document_entry.pack(side="left", padx=5)
 
-        # Check if the value is not empty and is a valid number
-        try:
-            number = float(value)  # Try converting to a float (handles decimals and negative numbers)
-            if number > 0:
-                print("good")
-                info(current_window, "Job number accepted")  # Show info label
+        # Entry for comments with placeholder
+        self.comments_entry = ttk.Entry(entry_frame, width=30)
+        self.comments_entry.insert(0, "Enter Comments")
+        self.comments_entry.bind("<FocusIn>", self.clear_placeholder)
+        self.comments_entry.bind("<FocusOut>", self.set_placeholder)
+        self.comments_entry.pack(side="left", padx=5)
+
+        # Bind Enter key to add record for both entry fields
+        self.document_entry.bind("<Return>", self.add_record)
+        self.comments_entry.bind("<Return>", self.add_record)
+
+        # Treeview for displaying records
+        self.tree = ttk.Treeview(self.tab1, columns=("Document", "Comments"), show="tree")
+        self.tree.heading("#0", text="UUID")  # Setting the first column for UUID
+        self.tree.heading("Document", text="Document Name")
+        self.tree.heading("Comments", text="Comments")
+        self.tree.pack(expand=True, fill="both", padx=5, pady=(5, 0))
+        
+        self.tree.bind("<<TreeviewSelect>>", self.on_treeview_select)
+        self.tree.bind("<Double-1>", self.deselect_item)  # Bind double-click event
+
+        # Frame for buttons
+        button_frame = ttk.Frame(self.tab1)
+        button_frame.pack(pady=5)
+
+        # Buttons
+        self.add_button = ttk.Button(button_frame, text="Add Record", command=self.add_record)
+        self.remove_button = ttk.Button(button_frame, text="Remove Record", command=self.remove_record)
+        self.edit_button = ttk.Button(button_frame, text="Edit Record", command=self.edit_record)
+        self.add_button.pack(side="left", padx=5)
+        self.remove_button.pack(side="left", padx=5)
+        self.edit_button.pack(side="left", padx=5)
+
+
+    def clear_placeholder(self, event):
+        if event.widget.get() == "Enter Document Name" or event.widget.get() == "Enter Comments":
+            event.widget.delete(0, tk.END)
+            event.widget.config(fg="black")  # Change text color to black when typing
+
+    def set_placeholder(self, event):
+        if event.widget.get() == "":
+            if event.widget is self.document_entry:
+                event.widget.insert(0, "Enter Document Name")
             else:
-                print("NOT GOOD")
-        except ValueError:
-            print("NOT GOOD")
+                event.widget.insert(0, "Enter Comments")
+            event.widget.config(fg="lightgrey")  # Set placeholder text color to light grey
 
+    def generate_uuid(self):
+        if self.current_selected_uuid:
+            base_uuid = self.current_selected_uuid
+            index = 1
+            while True:
+                new_uuid = f"{base_uuid}.{index}"
+                if not self.tree.exists(new_uuid):
+                    return new_uuid
+                index += 1
+        else:
+            base_uuid = self.root_uuid
+            while True:
+                if not self.tree.exists(str(base_uuid)):
+                    return str(base_uuid)
+                base_uuid += 1
 
+    def add_record(self, event=None):
+        doc_name = self.document_entry.get()
+        comments = self.comments_entry.get()
+        
+        # Prevent adding empty records
+        if doc_name == "Enter Document Name" or comments == "Enter Comments":
+            doc_name=""
+            comments=""
+        
+        # Debug print to check values being added
+        #print(f"Adding record: UUID={self.generate_uuid()}, Document Name='{doc_name}', Comments='{comments}'")
+        
+        uuid_value = self.generate_uuid()
+        
+        # Collapse all items before adding a new record
+        self.collapse_all_items()
 
+        # Insert the new record
+        if '.' in uuid_value:  # Child item
+            parent_uuid = '.'.join(uuid_value.split('.')[:-1])
+            self.tree.insert(parent_uuid, "end", iid=uuid_value, text=uuid_value, values=(doc_name, comments))
+        else:  # Root item
+            self.tree.insert("", "end", iid=uuid_value, text=uuid_value, values=(doc_name, comments))
+        
+        # Automatically expand parent if it's a child
+        if '.' in uuid_value:
+            self.tree.item(parent_uuid, open=True)
 
- def start_save():  # Save
-        pattern = re.compile(r'[!@#$%^&*(),.?":{}|<>]')     # Define unwanted characters
-        if pattern.search(e_raw.get()):     # Search for special characters
-            info(current_window, "The only special character allowed is a hyphen...")
-        else: #* accepted
-            if "-" in e_raw.get():
-                JBNUM,DASH=e_raw.get().split("-")
-                print(JBNUM)
-                print(DASH)
-                if  e_raw.get() != "":#* accepted   
-                    if int(e_raw.get()) > 0:
-                        info(current_window, "Job number accepted...") #* accepted
-                    else:
-                        info(current_window, "Entry must be a number greater than zero...")
-                else:
-                    info(current_window, "Entry can not be blank...")
+        # Expand only the current selected item
+        if self.current_selected_uuid:
+            self.tree.item(self.current_selected_uuid, open=True)
 
+        self.sort_treeview()  # Sort items after adding a record
+        
+        # Clear the input fields
+        self.document_entry.delete(0, tk.END)
+        self.comments_entry.delete(0, tk.END)
+        
+        # Set focus back to the document entry
+        self.document_entry.focus_set()
+        
+        if not self.current_selected_uuid:
+            self.root_uuid += 1
 
+    def collapse_all_items(self):
+        """Collapse all items in the Treeview."""
+        for item in self.tree.get_children():
+            self.tree.item(item, open=False)
+            self._collapse_children(item)
 
+    def _collapse_children(self, item):
+        """Recursively collapse all child items."""
+        children = self.tree.get_children(item)
+        for child in children:
+            self.tree.item(child, open=False)
+            self._collapse_children(child)
 
+    def remove_record(self):
+        selected_item = self.tree.selection()
+        if selected_item:
+            self.tree.delete(selected_item)
+            self.sort_treeview()  # Re-sort items after removing a record
 
+    def edit_record(self):
+        selected_item = self.tree.selection()
+        if selected_item:
+            doc_name = self.document_entry.get()
+            comments = self.comments_entry.get()
+            self.tree.item(selected_item, values=(doc_name, comments))
+        
+    def on_treeview_select(self, event):
+        selected_item = self.tree.selection()
+        if selected_item:
+            self.current_selected_uuid = selected_item[0]
+        else:
+            self.current_selected_uuid = None
 
+    def deselect_item(self, event):
+        """Deselect the currently selected item on double-click."""
+        self.tree.selection_remove(self.tree.selection())  # Remove selection
 
+    def sort_treeview(self):
+        def recursive_sort(parent=""):
+            children = self.tree.get_children(parent)
+            sorted_children = sorted(children, key=lambda x: list(map(int, x.split('.'))))
+            
+            for index, child in enumerate(sorted_children):
+                self.tree.move(child, parent, index)
+                recursive_sort(child)  # Sort the children recursively
 
+        recursive_sort()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def start_destroy():  # Remove all existing widgets
-        for widget in start.winfo_children():
-            widget.destroy()
-
-    def on_key(event, entry, placeholder_text, default_fg):  # Handle the first key press e_raw
-        if entry.get() == placeholder_text:
-            entry.delete(0, tk.END)  # Clear entry
-            entry.config(fg=default_fg)
-
-    def placeholder(entry, placeholder_text="Enter job number...", placeholder_fg='grey', default_fg='white'):  # Create an Entry & placeholder
-        entry.insert(0, placeholder_text)
-        entry.focus_set()
-        entry.icursor(0)
-        entry.bind("<KeyPress>", lambda event: on_key(event, entry, placeholder_text, default_fg))
-        entry.pack(pady=(15, 5))
-        return entry
-
-    # Create the main window
-    global current_window
-    start = tk.Tk()
-    start.title("Welcome - Research Log")
-    stht = 150
-    stwi = 350
-    screenht = start.winfo_screenheight()
-    screenwi = start.winfo_screenwidth()
-    x = (screenwi / 2) - (stwi / 2)
-    y = (screenht / 2) - (stht / 2)
-    start.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
-    start.resizable(False, False)
-    
-    placeholder_text = "Enter job number..."
-    jbnumraw = tk.StringVar()
-
-    # Create a frame for the info label
-    info_frame = tk.Frame(start)
-    info_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-    current_window = start
-
-    e_raw = tk.Entry(start, fg='grey')
-    e_raw = placeholder(e_raw, placeholder_text)
-    b_save = tk.Button(start, text="Research", height="1", width="15", command=start_save)
-    b_save.pack()
-    b_help = tk.Button(start, text="Help", height="1", width="15")  # - work on help command
-    b_help.pack()
-    b_close = tk.Button(start, text="Exit", height="1", width="15", command=terminate)
-    b_close.pack()
-
-    start.mainloop()
-
-def init():
-    print(JBNUM_RAW)
-
-def terminate():
-    global current_window
-    if current_window is not None:
-        current_window.destroy()  # Close the window
-        current_window = None  # Reset the reference
-
-def info(window, text):
-    global delay
-
-    # Create or get the info frame
-    for widget in window.winfo_children():
-        if isinstance(widget, tk.Frame):
-            info_frame = widget
-            break
-    else:
-        info_frame = tk.Frame(window)
-        info_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-    # Create the info label and add it to the frame
-    info_label = tk.Label(info_frame, text=text, font=('Helvetica', 10))
-    info_label.pack(side=tk.BOTTOM, anchor=tk.SE, padx=10, pady=10)
-    
-    # Force the window to update its display
-    window.update_idletasks()
-    
-    # Destroy the label after the delay
-    window.after(delay, lambda: info_label.destroy())
-
-start()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = LandRecordOrganizer(root)
+    root.mainloop()

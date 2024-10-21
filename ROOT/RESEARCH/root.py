@@ -484,7 +484,6 @@ def info(window, text, show_buttons=False, Settings=False, yes_command=None, no_
 
     if Settings:
 
-
         def SettingsMenu(event):
             # Create the popup menu
             Settings_menu = tk.Menu(window, tearoff=0)
