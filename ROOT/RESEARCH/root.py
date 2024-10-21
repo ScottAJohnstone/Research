@@ -7,9 +7,6 @@
 
 #!Fix combo boxes
 
-
-
-
 from curses import window
 from curses.ascii import FF
 import tkinter as tk
