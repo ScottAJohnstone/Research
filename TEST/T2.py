@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
+import tkinter.messagebox as messagebox
+
 
 class LandRecordOrganizer:
     def __init__(self, root):
@@ -49,13 +51,23 @@ class LandRecordOrganizer:
         self.document_entry.bind("<Return>", self.add_record)
         self.comments_entry.bind("<Return>", self.add_record)
 
+        # Frame for the Treeview and scrollbar
+        tree_frame = ttk.Frame(self.tab1)
+        tree_frame.pack(expand=True, fill="both", padx=5, pady=(5, 0))
+
+        # Scrollbar
+        self.tree_scroll = ttk.Scrollbar(tree_frame)
+        self.tree_scroll.pack(side="right", fill="y")
+
         # Treeview for displaying records
-        self.tree = ttk.Treeview(self.tab1, columns=("Document", "Comments"), show="tree")
+        self.tree = ttk.Treeview(tree_frame, columns=("Document", "Comments"), show="tree", yscrollcommand=self.tree_scroll.set)
         self.tree.heading("#0", text="UUID")  # Setting the first column for UUID
         self.tree.heading("Document", text="Document Name")
         self.tree.heading("Comments", text="Comments")
-        self.tree.pack(expand=True, fill="both", padx=5, pady=(5, 0))
-        
+        self.tree.pack(expand=True, fill="both")
+
+        self.tree_scroll.config(command=self.tree.yview)  # Configure the scrollbar
+
         self.tree.bind("<<TreeviewSelect>>", self.on_treeview_select)
         self.tree.bind("<Double-1>", self.deselect_item)  # Bind double-click event
 
@@ -70,7 +82,6 @@ class LandRecordOrganizer:
         self.add_button.pack(side="left", padx=5)
         self.remove_button.pack(side="left", padx=5)
         self.edit_button.pack(side="left", padx=5)
-
 
     def clear_placeholder(self, event):
         if event.widget.get() == "Enter Document Name" or event.widget.get() == "Enter Comments":
@@ -110,14 +121,8 @@ class LandRecordOrganizer:
             doc_name=""
             comments=""
         
-        # Debug print to check values being added
-        #print(f"Adding record: UUID={self.generate_uuid()}, Document Name='{doc_name}', Comments='{comments}'")
-        
         uuid_value = self.generate_uuid()
         
-        # Collapse all items before adding a new record
-        self.collapse_all_items()
-
         # Insert the new record
         if '.' in uuid_value:  # Child item
             parent_uuid = '.'.join(uuid_value.split('.')[:-1])
@@ -145,24 +150,37 @@ class LandRecordOrganizer:
         if not self.current_selected_uuid:
             self.root_uuid += 1
 
-    def collapse_all_items(self):
-        """Collapse all items in the Treeview."""
-        for item in self.tree.get_children():
-            self.tree.item(item, open=False)
-            self._collapse_children(item)
-
-    def _collapse_children(self, item):
-        """Recursively collapse all child items."""
-        children = self.tree.get_children(item)
-        for child in children:
-            self.tree.item(child, open=False)
-            self._collapse_children(child)
-
     def remove_record(self):
         selected_item = self.tree.selection()
         if selected_item:
+            # Check if the selected item has children
+            children = self.tree.get_children(selected_item)
+            if children:
+                # Ask the user if they want to save child documents
+                response = messagebox.askyesno(
+                    "Confirm Deletion",
+                    "This document has child records. Do you want to save them before deleting?"
+                )
+                if response:  # User chose to save
+                    # Logic to save child documents goes here
+                    # For example, you might want to collect data from children and save it to a file
+                    self.save_child_documents(selected_item)
+
+            # Remove the selected item and its children
             self.tree.delete(selected_item)
             self.sort_treeview()  # Re-sort items after removing a record
+
+    def save_child_documents(self, parent_uuid):
+        """Implement the logic to save child documents."""
+        children = self.tree.get_children(parent_uuid)
+        child_data = []
+
+        for child in children:
+            # Fetch the child data (UUID, Document Name, Comments)
+            child_uuid = child
+            document_name, comments = self.tree.item(child, "values")
+            child_data.append((child_uuid, document_name, comments))
+
 
     def edit_record(self):
         selected_item = self.tree.selection()
@@ -177,6 +195,9 @@ class LandRecordOrganizer:
             self.current_selected_uuid = selected_item[0]
         else:
             self.current_selected_uuid = None
+        
+        # Set focus back to the document entry box after selecting an item
+        self.document_entry.focus_set()
 
     def deselect_item(self, event):
         """Deselect the currently selected item on double-click."""
