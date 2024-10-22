@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 class LandRecordOrganizer:
     def __init__(self, root):
@@ -13,10 +13,10 @@ class LandRecordOrganizer:
         self.tab3 = ttk.Frame(self.notebook)
         self.tab4 = ttk.Frame(self.notebook)
         
-        self.notebook.add(self.tab1, text="Records")
-        self.notebook.add(self.tab2, text="Tab 2")
-        self.notebook.add(self.tab3, text="Tab 3")
-        self.notebook.add(self.tab4, text="Tab 4")
+        self.notebook.add(self.tab1, text="Record Logger")
+        self.notebook.add(self.tab2, text="Renaming Suite")
+        self.notebook.add(self.tab3, text="File Viewer")
+        self.notebook.add(self.tab4, text="About")
         self.notebook.pack(expand=True, fill="both")
         
         # UUID tracking
@@ -66,7 +66,7 @@ class LandRecordOrganizer:
 
         self.tree_scroll.config(command=self.tree.yview)  # Configure the scrollbar
 
-        self.tree.bind("<<TreeviewSelect>>", self.on_treeview_select)
+        self.tree.bind("<<TreeviewSelect>>", self.on_treeview_select)  # Bind the selection event
         self.tree.bind("<Double-1>", self.deselect_item)  # Bind double-click event
 
         # Frame for buttons
@@ -84,7 +84,7 @@ class LandRecordOrganizer:
     def clear_placeholder(self, event):
         if event.widget.get() == "Enter Document Name" or event.widget.get() == "Enter Comments":
             event.widget.delete(0, tk.END)
-            event.widget.config(fg="black")  # Change text color to black when typing
+            #event.widget.config(fg="black")  # Change text color to black when typing
 
     def set_placeholder(self, event):
         if event.widget.get() == "":
@@ -92,7 +92,27 @@ class LandRecordOrganizer:
                 event.widget.insert(0, "Enter Document Name")
             else:
                 event.widget.insert(0, "Enter Comments")
-            event.widget.config(fg="lightgrey")  # Set placeholder text color to light grey
+            #event.widget.config(fg="lightgrey")  # Set placeholder text color to light grey
+
+    def on_treeview_select(self, event):
+        selected_item = self.tree.selection()
+        
+        if selected_item:
+            self.current_selected_uuid = selected_item[0]
+            
+            # Get the current values of the selected item
+            doc_name, comments = self.tree.item(self.current_selected_uuid, 'values')
+            
+            # Populate the entry fields with the selected values
+            self.document_entry.delete(0, tk.END)
+            self.document_entry.insert(0, doc_name)
+            self.comments_entry.delete(0, tk.END)
+            self.comments_entry.insert(0, comments)
+            
+            # Set focus back to the document entry
+            self.document_entry.focus_set()
+        else:
+            self.current_selected_uuid = None
 
     def generate_uuid(self):
         if self.current_selected_uuid:
@@ -116,8 +136,8 @@ class LandRecordOrganizer:
         
         # Prevent adding empty records
         if doc_name == "Enter Document Name" or comments == "Enter Comments":
-            doc_name=""
-            comments=""
+            doc_name = ""
+            comments = ""
         
         uuid_value = self.generate_uuid()
         
@@ -136,6 +156,9 @@ class LandRecordOrganizer:
         if self.current_selected_uuid:
             self.tree.item(self.current_selected_uuid, open=True)
 
+        self.tree.see(uuid_value)  # Make sure the new entry is visible       #- maybe i want to change it so the parent entry is always in view?
+
+
         self.sort_treeview()  # Sort items after adding a record
         
         # Clear the input fields
@@ -153,20 +176,34 @@ class LandRecordOrganizer:
         if selected_item:
             self.tree.delete(selected_item)
             self.sort_treeview()  # Re-sort items after removing a record
+            self.document_entry.focus_set()
+
 
     def edit_record(self):
         selected_item = self.tree.selection()
+        
         if selected_item:
+            # Get the selected item (there should only be one)
+            selected_uuid = selected_item[0]
+            
+            # Get the current values in the entry fields
             doc_name = self.document_entry.get()
             comments = self.comments_entry.get()
-            self.tree.item(selected_item, values=(doc_name, comments))
-        
-    def on_treeview_select(self, event):
-        selected_item = self.tree.selection()
-        if selected_item:
-            self.current_selected_uuid = selected_item[0]
+            
+            # Check if the entries are not just placeholders
+            if doc_name == "Enter Document Name" or comments == "Enter Comments":
+                messagebox.showwarning("Warning", "Please enter valid document name and comments.")
+                return
+
+            # Update the selected record in the Treeview with the new values
+            self.tree.item(selected_uuid, values=(doc_name, comments))
+
+            # Clear the input fields and set focus back to the document entry
+            self.document_entry.delete(0, tk.END)
+            self.comments_entry.delete(0, tk.END)
+            self.document_entry.focus_set()
         else:
-            self.current_selected_uuid = None
+            messagebox.showwarning("Warning", "No record selected for editing.")
 
     def deselect_item(self, event):
         """Deselect the currently selected item on double-click."""
