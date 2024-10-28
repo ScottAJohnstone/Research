@@ -58,10 +58,18 @@ class LandRecordOrganizer:
         self.tree_scroll.pack(side="right", fill="y")
 
         # Treeview for displaying records
-        self.tree = ttk.Treeview(tree_frame, columns=("Document", "Comments"), show="tree", yscrollcommand=self.tree_scroll.set)
-        self.tree.heading("#0", text="UUID")  # Setting the first column for UUID
-        self.tree.heading("Document", text="Document Name")
-        self.tree.heading("Comments", text="Comments")
+        self.tree = ttk.Treeview(tree_frame, columns=("Document", "Comments"), show="headings", yscrollcommand=self.tree_scroll.set)
+
+        # Define columns and headings
+        self.tree.heading("#0", text="UUID")  # UUID column (showing UUID without a separate header)
+        self.tree.heading("Document", text="Document Name")  # Document column
+        self.tree.heading("Comments", text="Comments")  # Comments column
+
+        # Set column widths
+        self.tree.column("#0", width=100, anchor="center")  # UUID width
+        self.tree.column("Document", width=200, anchor="w")  # Document width
+        self.tree.column("Comments", width=200, anchor="w")  # Comments width
+
         self.tree.pack(expand=True, fill="both")
 
         self.tree_scroll.config(command=self.tree.yview)  # Configure the scrollbar
@@ -80,6 +88,7 @@ class LandRecordOrganizer:
         self.add_button.pack(side="left", padx=5)
         self.remove_button.pack(side="left", padx=5)
         self.edit_button.pack(side="left", padx=5)
+
 
     def clear_placeholder(self, event):
         if event.widget.get() == "Enter Document Name" or event.widget.get() == "Enter Comments":
@@ -224,3 +233,9 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = LandRecordOrganizer(root)
     root.mainloop()
+
+
+
+
+
+#BROKENNNNNNNNNNN

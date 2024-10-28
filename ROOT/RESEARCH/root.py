@@ -22,6 +22,7 @@ import socket
 from UTILITY import date_time as dt
 from UTILITY import other as o
 from UTILITY import Hovertip
+from UTILITY import string_test as st
 
 
 def prelim():
