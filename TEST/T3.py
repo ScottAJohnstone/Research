@@ -7,8 +7,8 @@ from tkinter import filedialog, ttk, messagebox
 
 
 
-#Relative imports
-from ...RESEARCHV2.ROOT.RESEARCH.UTILITY.string_test import str_contains
+# #Relative imports
+# from ...RESEARCHV2.ROOT.RESEARCH.UTILITY.string_test import str_contains #! fix
 
 class FileRenamerApp(tk.Tk):
     def __init__(self):

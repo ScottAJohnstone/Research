@@ -446,7 +446,6 @@ def start():
 def init():
     print(JBNUM_RAW)                                           # Need to complete
     
-
 def terminate():
     global current_window
     if current_window is not None:
