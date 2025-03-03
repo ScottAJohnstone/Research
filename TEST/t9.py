@@ -10,9 +10,6 @@ class BulkRenamer:
         self.root = root
         self.root.title("Bulk File Renamer")
         
-        # Set window size (wider than tall)
-        self.root.geometry("800x400")  # Width is 800px, Height is 400px
-        
         # Set up UI
         self.setup_ui()
         
@@ -23,15 +20,12 @@ class BulkRenamer:
         self.load_recent_files()
 
     def setup_ui(self):
-        # Create buttons (place them next to each other)
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=10)
+        # Create buttons
+        self.select_files_button = tk.Button(self.root, text="Select Alternate Files", command=self.select_files)
+        self.select_files_button.pack(pady=10)
         
-        self.select_files_button = tk.Button(button_frame, text="Select Alternate Files", command=self.select_files)
-        self.select_files_button.pack(side=tk.LEFT, padx=10)
-        
-        self.execute_button = tk.Button(button_frame, text="Execute Bulk Renaming", command=self.execute_rename, state=tk.DISABLED)
-        self.execute_button.pack(side=tk.LEFT, padx=10)
+        self.execute_button = tk.Button(self.root, text="Execute Bulk Renaming", command=self.execute_rename, state=tk.DISABLED)
+        self.execute_button.pack(pady=10)
         
         # Create Treeview to show file names
         self.treeview = ttk.Treeview(self.root, columns=("Original", "Proposed"), show="headings")
@@ -120,24 +114,8 @@ class BulkRenamer:
             # Prompt user for new proposed filename
             new_name = askstring("Rename Proposed Filename", f"Edit the proposed name for {original_name}:", initialvalue=proposed_name)
             if new_name:
-                # Update the proposed name in the Treeview
                 self.treeview.item(item, values=(original_name, new_name))
-                
-                # Auto-select text from the beginning to before the extension
-                self.select_auto_text(item, new_name)
     
-    def select_auto_text(self, item, proposed_name):
-        # Get the index of the proposed name's position and select the name up to the last character before the extension
-        name, ext = os.path.splitext(proposed_name)
-        text_to_select = name  # Select everything except the extension
-        self.treeview.selection_set(item)  # Select the row in the Treeview
-        
-        # Setting focus on the Treeview to allow text selection
-        self.treeview.focus(item)
-        
-        # Display the text from the proposed name in the entry box
-        self.treeview.item(item, values=(text_to_select, proposed_name))  # Auto-select
-
 def main():
     root = tk.Tk()
     app = BulkRenamer(root)

@@ -3,7 +3,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 from tkinter.simpledialog import askstring
-from datetime import datetime
+from datetime import datetime, timedelta
+
 
 class BulkRenamer:
     def __init__(self, root):
@@ -13,14 +14,17 @@ class BulkRenamer:
         # Set window size (wider than tall)
         self.root.geometry("800x400")  # Width is 800px, Height is 400px
         
+        # Set the default download folder path (can be changed by the user)
+        self.default_folder = os.path.expanduser('~') + '/Downloads'
+        
         # Set up UI
         self.setup_ui()
         
         # Default list of files
         self.files = []
 
-        # Automatically load recent files from Downloads folder
-        self.load_recent_files()
+        # Load files from the default folder
+        self.load_files_from_folder()
 
     def setup_ui(self):
         # Create buttons (place them next to each other)
@@ -33,6 +37,9 @@ class BulkRenamer:
         self.execute_button = tk.Button(button_frame, text="Execute Bulk Renaming", command=self.execute_rename, state=tk.DISABLED)
         self.execute_button.pack(side=tk.LEFT, padx=10)
         
+        self.set_folder_button = tk.Button(button_frame, text="Set Default Folder", command=self.set_default_folder)
+        self.set_folder_button.pack(side=tk.LEFT, padx=10)
+        
         # Create Treeview to show file names
         self.treeview = ttk.Treeview(self.root, columns=("Original", "Proposed"), show="headings")
         self.treeview.heading("Original", text="Original Filename")
@@ -41,38 +48,36 @@ class BulkRenamer:
         
         # Bind double-click on proposed file names to manually rename them
         self.treeview.bind("<Double-1>", self.on_proposed_name_click)
-        
-    def load_recent_files(self):
-        # Attempt to auto-select recent files from Downloads folder
-        downloads_folder = os.path.expanduser('~') + '/Downloads'
+    
+    def load_files_from_folder(self):
+        # Load files from the default folder
+        downloads_folder = self.default_folder
         
         try:
-            files_in_downloads = [os.path.join(downloads_folder, f) for f in os.listdir(downloads_folder) if os.path.isfile(os.path.join(downloads_folder, f))]
-            files_in_downloads.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            # Get the current time and subtract 1 hour to define the time range
+            current_time = datetime.now()
+            time_limit = current_time - timedelta(hours=1)
+
+            files_in_folder = [
+                os.path.join(downloads_folder, f) for f in os.listdir(downloads_folder)
+                if os.path.isfile(os.path.join(downloads_folder, f)) and not f.startswith('.')
+            ]
             
-            # Check if there are recent files with the same timestamp
-            recent_files = self.get_recent_files_with_same_timestamp(files_in_downloads)
+            # Filter files based on their creation time (only files added within the last hour)
+            recent_files = [
+                f for f in files_in_folder
+                if datetime.fromtimestamp(os.path.getctime(f)) > time_limit
+            ]
+            
             if recent_files:
                 self.files = recent_files
                 self.populate_treeview()
                 return
             
         except FileNotFoundError:
-            messagebox.showerror("Error", "Downloads folder not found!")
+            messagebox.showerror("Error", f"Folder {downloads_folder} not found!")
             return
 
-    def get_recent_files_with_same_timestamp(self, files):
-        if not files:
-            return []
-        
-        # Get the most recent file's timestamp
-        latest_time = os.path.getmtime(files[0])
-        
-        # Filter out files that have the same timestamp as the most recent file
-        recent_files = [f for f in files if abs(os.path.getmtime(f) - latest_time) < 1]
-        
-        return recent_files
-    
     def populate_treeview(self):
         # Clear the existing data in the treeview
         for row in self.treeview.get_children():
@@ -88,8 +93,23 @@ class BulkRenamer:
 
     def rename_file(self, original_name):
         name, ext = os.path.splitext(original_name)
-        return name + "_rnm" + ext
-    
+
+        # Check if the filename contains only numbers (excluding the extension)
+        if name.isdigit():
+            return f"Map #{name}" + ext
+        
+        # Check if the filename contains a "-"
+        elif '-' in name:
+            # Split the name around the "-"
+            parts = name.split('-')
+            
+            # Ensure the parts before and after the "-" are numeric
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                return f"Vol.{parts[0]} - Pg.{parts[1]}" + ext
+        
+        # Default renaming behavior (add "_rnm" to the file name)
+        return name + ext
+
     def select_files(self):
         # Allow user to manually select files using a file dialog
         file_paths = filedialog.askopenfilenames(title="Select Files", filetypes=[("All Files", "*.*")])
@@ -100,8 +120,8 @@ class BulkRenamer:
     def execute_rename(self):
         for item in self.treeview.get_children():
             original_name, proposed_name = self.treeview.item(item, "values")
-            original_path = os.path.join(os.path.expanduser('~'), 'Downloads', original_name)
-            proposed_path = os.path.join(os.path.expanduser('~'), 'Downloads', proposed_name)
+            original_path = os.path.join(self.default_folder, original_name)
+            proposed_path = os.path.join(self.default_folder, proposed_name)
             
             if original_name != proposed_name:  # Rename only if changed
                 try:
@@ -111,32 +131,40 @@ class BulkRenamer:
                     return
         
         messagebox.showinfo("Success", "Bulk renaming executed successfully!")
-    
+
+        # Clear the Treeview contents after renaming
+        self.files = []
+        self.populate_treeview()
+
     def on_proposed_name_click(self, event):
         item = self.treeview.identify('item', event.x, event.y)
         if item:
             original_name, proposed_name = self.treeview.item(item, "values")
             
-            # Prompt user for new proposed filename
-            new_name = askstring("Rename Proposed Filename", f"Edit the proposed name for {original_name}:", initialvalue=proposed_name)
-            if new_name:
-                # Update the proposed name in the Treeview
-                self.treeview.item(item, values=(original_name, new_name))
-                
-                # Auto-select text from the beginning to before the extension
-                self.select_auto_text(item, new_name)
-    
-    def select_auto_text(self, item, proposed_name):
-        # Get the index of the proposed name's position and select the name up to the last character before the extension
-        name, ext = os.path.splitext(proposed_name)
-        text_to_select = name  # Select everything except the extension
-        self.treeview.selection_set(item)  # Select the row in the Treeview
-        
-        # Setting focus on the Treeview to allow text selection
-        self.treeview.focus(item)
-        
-        # Display the text from the proposed name in the entry box
-        self.treeview.item(item, values=(text_to_select, proposed_name))  # Auto-select
+            # Get the file name and extension
+            name, ext = os.path.splitext(proposed_name)
+
+            # Show the full filename, but highlight only the name part (not the extension)
+            new_name = askstring("Edit Filename", "Edit the proposed name:", initialvalue=name)
+            
+            if new_name is not None:
+                # Update the proposed name with the new value, keep the extension unchanged
+                self.treeview.item(item, values=(original_name, new_name + ext))
+
+                # Update the execution button state if filenames have changed
+                self.execute_button.config(state=tk.NORMAL)
+
+    def set_default_folder(self):
+        # Ask the user to select a new default folder
+        folder_path = filedialog.askdirectory(title="Select Default Folder")
+        if folder_path:
+            self.default_folder = folder_path
+            messagebox.showinfo("Folder Set", f"Default folder set to: {folder_path}")
+            
+            # Clear the current files list and reload files from the new folder
+            self.files = []
+            self.load_files_from_folder()
+
 
 def main():
     root = tk.Tk()
