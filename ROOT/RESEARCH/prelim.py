@@ -157,9 +157,6 @@ def prop(JBNUM):
     prop.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
     prop.resizable(False, False)
 
-
-    
-
     def clear_history():
         db_file = 'SAJHIST.db'                                                      #- fix this to change per person
         if os.path.isfile(db_file):
@@ -275,31 +272,30 @@ def start():
         if e_raw.get() == "SAJ":
             info(current_window, text=None, Settings=True)
             #info(current_window, "BOO")
-            #print("Scott add Settings")                                                            #!fix
             focusset()
-        elif e_raw.get() == "":                                                           #* fail
+        elif e_raw.get() == "":                                                           #* fail intent
             info(current_window, "Entry can not be left blank...")
             focusset()
-        elif e_raw.get() == "Enter job number...":                                      #* fail
+        elif e_raw.get() == "Enter job number...":                                      #* fail intent
             info(current_window, "Entry can not be left blank...")
             focusset()
-        elif e_raw.get() == "?":                                                        #* pass
+        elif e_raw.get() == "?":                                                        #* pass intent
             info(current_window, "Entry accepted...")
             JBNUM = e_raw.get()
             DASH=""
             start.destroy()
             prop(JBNUM)
-        elif e_raw.get() == "-":                                                        #* fail
+        elif e_raw.get() == "-":                                                        #* fail intent
             info(current_window, "Please enter a number...")
             focusset()
-        elif e_raw.get().isalpha():                                                     #* fail
+        elif e_raw.get().isalpha():                                                     #* fail intent
             info(current_window, "Please enter a number...")
             focusset()
-        elif badchars.search(e_raw.get()):                                              #* fail
+        elif badchars.search(e_raw.get()):                                              #* fail intent
             info(current_window, "The only special character allowed is a hyphen...")
             focusset()
         else:
-            if e_raw.get().isnumeric() and float(e_raw.get()) > 0:                  #* pass     if is num greater than 0 only
+            if e_raw.get().isnumeric() and float(e_raw.get()) > 0:                  #* pass intent    if is num greater than 0 only
                 info(current_window, "Entry accepted...")
                 focusset()
                 JBNUM = e_raw.get()
@@ -308,13 +304,13 @@ def start():
                 prop(JBNUM)
             elif "-" in e_raw.get():
                 JBNUM, DASH = e_raw.get().split("-")                                   
-                if JBNUM == "":                                                    #* fail
+                if JBNUM == "":                                                    #* fail intent
                     info(current_window, "Base job number must be greater than zero...")
-                if DASH == "":                                                    #* fail
+                if DASH == "":                                                    #* fail intent
                     info(current_window, "Please enter a dash or remove the '-'...")
-                elif JBNUM.isalpha():                                               #* fail
+                elif JBNUM.isalpha():                                               #* fail intent
                     info(current_window, "Base job number must contain a number...")
-                else:                                                              #* pass
+                else:                                                              #* pass intent
                     def yes():
                         start.destroy()
                         prop(JBNUM)

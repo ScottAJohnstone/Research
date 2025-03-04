@@ -12,9 +12,18 @@ class BulkRenamer:
     def __init__(self, root):
         self.root = root
         self.root.title("Renaning Suite")
+        stht = 400
+        stwi = 800
+        screenht = self.root.winfo_screenheight()
+        screenwi = self.root.winfo_screenwidth()
+        x = (screenwi / 2) - (stwi / 2)
+        y = (screenht / 2) - (stht / 2)
+        self.root.geometry(f'{stwi}x{stht}+{int(x)}+{int(y)}')
+        self.root.resizable(False, False)
+
         
         # Set window size
-        self.root.geometry("800x400")
+        #self.root.geometry("800x400")
         
         # Initialize variables for prefix, suffix, and checkbox state
         self.prefix = tk.StringVar(value=f'{jobnum}_')                    #- need to set default values ; job num
@@ -58,7 +67,9 @@ class BulkRenamer:
 
     def select_files(self):
         # Allow user to manually select files using a file dialog
-        file_paths = filedialog.askopenfilenames(title="Select Files", filetypes=[("All Files", "*.*")])
+        file_paths = [f for f in filedialog.askopenfilenames(title="Select Files", filetypes=[("All Files", "*.*")]) 
+              if not os.path.basename(f).startswith(".") and not os.path.basename(f) == ".DS_Store"]
+
         if file_paths:
             # Clear the current files list and save the manually selected files
             self.selected_files = [(file_path, os.path.basename(file_path)) for file_path in file_paths]
@@ -67,12 +78,17 @@ class BulkRenamer:
             self.populate_treeview()
 
     def open_configure_window(self):
-        configure_window = tk.Toplevel(self.root)
-        configure_window.title("Configure Default Settings")
-        configure_window.geometry("590x180")  # Adjusted for compact view
+        # Check if the window already exists and is still open
+        if hasattr(self, "configure_window") and self.configure_window.winfo_exists():
+            self.configure_window.lift()  # Bring existing window to front
+            return  # Stop from opening another window
+
+        self.configure_window = tk.Toplevel(self.root)  # Store as an instance attribute
+        self.configure_window.title("Configure Default Settings")
+        self.configure_window.geometry("590x180")  # Adjusted for compact view
 
         # Create a frame to hold everything in a grid layout
-        config_frame = tk.Frame(configure_window)
+        config_frame = tk.Frame(self.configure_window)
         config_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         # Path selection (Row 0)
@@ -87,28 +103,28 @@ class BulkRenamer:
         browse_button.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
 
         # Prefix setting (Row 1)
-        prefix_label = tk.Label(config_frame, text="Default Prefix:")
-        prefix_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        self.prefix_label = tk.Label(config_frame, text="Default Prefix:")
+        self.prefix_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
 
         self.prefix_entry = tk.Entry(config_frame, textvariable=self.prefix, width=30)
         self.prefix_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        apply_button = tk.Button(config_frame, text="Apply Changes", command=self.apply_changes)
-        apply_button.grid(row=1, column=2, padx=5, pady=5, sticky=tk.W, ipadx=1)
+        self.apply_button = tk.Button(config_frame, text="Apply Changes", command=self.apply_changes)
+        self.apply_button.grid(row=1, column=2, padx=5, pady=5, sticky=tk.W, ipadx=1)
 
         # Suffix setting (Row 2)
-        suffix_label = tk.Label(config_frame, text="Default Suffix:")
-        suffix_label.grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+        self.suffix_label = tk.Label(config_frame, text="Default Suffix:")
+        self.suffix_label.grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
 
         self.suffix_entry = tk.Entry(config_frame, textvariable=self.suffix, width=30)
         self.suffix_entry.grid(row=2, column=1, padx=5, pady=5)
 
-        cancel_button = tk.Button(config_frame, text="Cancel", command=configure_window.destroy)
-        cancel_button.grid(row=2, column=2, padx=5, pady=5, ipadx=26, sticky=tk.W)
+        self.cancel_button = tk.Button(config_frame, text="Cancel", command=self.configure_window.destroy)
+        self.cancel_button.grid(row=2, column=2, padx=5, pady=5, ipadx=26, sticky=tk.W)
 
         # Checkbox to enable custom prefix/suffix (Row 3)
-        custom_attributes_checkbox = tk.Checkbutton(config_frame, text="Enable Custom Prefix/Suffix", variable=self.custom_attributes)
-        custom_attributes_checkbox.grid(row=3, columnspan=3, padx=5, pady=5, sticky=tk.W)
+        self.custom_attributes_checkbox = tk.Checkbutton(config_frame, text="Enable Custom Prefix/Suffix", variable=self.custom_attributes)
+        self.custom_attributes_checkbox.grid(row=3, columnspan=3, padx=5, pady=5, sticky=tk.W)
 
     def browse_folder(self):
         folder_path = filedialog.askdirectory(title="Select Folder")
@@ -119,7 +135,6 @@ class BulkRenamer:
             self.load_recent_files()  # Reload files based on the new folder path
 
     def apply_changes(self):
-        # Apply changes to the current files based on new prefix/suffix and path
         folder_path = self.path_entry.get()
         if not folder_path:
             messagebox.showwarning("No Folder", "Please select a folder.")
@@ -130,12 +145,16 @@ class BulkRenamer:
 
         # Apply prefix and suffix based on checkbox state
         if self.custom_attributes.get():
-            self.apply_prefix_suffix()  # Apply prefix and suffix
+            self.apply_prefix_suffix()
         else:
-            self.remove_prefix_suffix()  # Remove prefix and suffix only if they are present
+            self.remove_prefix_suffix()
 
         # Repopulate the treeview with updated filenames
         self.populate_treeview()
+
+        # Destroy the configure_window if it exists
+        if hasattr(self, "configure_window") and self.configure_window.winfo_exists():
+            self.configure_window.destroy()
 
     def apply_prefix_suffix(self):
         # Apply renaming logic based on prefix and suffix
@@ -215,7 +234,6 @@ class BulkRenamer:
         if not self.default_folder:
             messagebox.showwarning("No Folder", "Please set a default folder.")
             return
-
         try:
             current_time = datetime.now()
             time_limit = current_time - timedelta(hours=1)
@@ -231,9 +249,15 @@ class BulkRenamer:
                 if datetime.fromtimestamp(os.path.getctime(f)) > time_limit
             ]
 
-            if not self.files:                  #- fix this... needs work... ugly
-                self.select_files()
-
+            if not self.files:
+                response = messagebox.askyesno("No recent files found", "No recent files found.Would you like to select files manually?")
+                if response is True:
+                    self.select_files()                
+                elif response is False:
+                    return
+                else:
+                    return
+                
             # Automatically apply rename logic to loaded files
             self.apply_rename_logic()
             self.populate_treeview()
@@ -289,8 +313,6 @@ class BulkRenamer:
 
                 # Update the execution button state if filenames have changed
                 self.execute_button.config(state=tk.NORMAL)
-
-
 def main():
     root = tk.Tk()
     app = BulkRenamer(root)
