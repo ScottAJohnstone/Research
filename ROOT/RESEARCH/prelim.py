@@ -1,3 +1,12 @@
+
+#. Research V2:	ROOT 
+#. Command line program to handle the organization and implementation of Title/Land Record documents and files.	
+
+#/                                                                                                               #/
+#/                                                                                                               #/
+
+#!Fix combo boxes
+
 from curses import window
 from curses.ascii import FF
 import tkinter as tk
@@ -95,7 +104,6 @@ def prop_history(history_type):
         print(f"Database error: {e}")
         return []
     return history
-
 
 def prop_validate(address, city_town, state, parcel_id):
     if not address or not city_town or state == "" or not parcel_id:
@@ -267,7 +275,7 @@ def start():
         if e_raw.get() == "SAJ":
             info(current_window, text=None, Settings=True)
             #info(current_window, "BOO")
-            #print("Scott add Settings")
+            #print("Scott add Settings")                                                            #!fix
             focusset()
         elif e_raw.get() == "":                                                           #* fail
             info(current_window, "Entry can not be left blank...")

@@ -1,195 +1,172 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog, filedialog
+import sqlite3
+import os
+import re
+import webbrowser
+import socket
+from datetime import datetime
 
-class LandRecordOrganizer:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Land Record Research Organizer")
+# Import custom utilities if needed
+try:
+    from UTILITY import date_time as dt
+    from UTILITY import other as o
+    from UTILITY import Hovertip
+    from UTILITY import string_test as st
+except ImportError:
+    print("UTILITY modules not found! Make sure they are available.")
+
+# Global Variables
+JBNUM_RAW = ""
+current_window = None
+delay = 3500  # Default delay for notifications
+
+
+def create_db(JBNUM):
+    """Create a database for the given JBNUM if it does not exist."""
+    conn = sqlite3.connect(f'{JBNUM}.res')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS property (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        address TEXT NOT NULL,
+                        city_town TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        parcel_id TEXT NOT NULL)''')
+    conn.commit()
+    conn.close()
+
+
+def prop_log(JBNUM, address, city_town, state, parcel_id, db_file):
+    """Log property data into the given database file."""
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO property (address, city_town, state, parcel_id) VALUES (?, ?, ?, ?)",
+                   (address, city_town, state, parcel_id))
+    conn.commit()
+    conn.close()
+
+
+def prop_history(history_type):
+    """Fetch property history based on type (city_town, address, parcel_id)."""
+    db_file = 'SAJHIST.db'
+    if not os.path.isfile(db_file):
+        return []
+    
+    try:
+        with sqlite3.connect(db_file) as conn:
+            cursor = conn.cursor()
+            query = f"SELECT DISTINCT {history_type} FROM property ORDER BY id DESC LIMIT 5"
+            cursor.execute(query)
+            history = [row[0] for row in cursor.fetchall() if row[0]]
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        return []
+    
+    return history
+
+
+def prop_validate(address, city_town, state, parcel_id):
+    """Validate property input fields."""
+    return all([address, city_town, state, parcel_id])
+
+
+def prop_maps(address, city_town, state, event=None):
+    """Open property location in Google Maps."""
+    query = f"{address}, {city_town}, {state}"
+    url = f"https://www.google.com/maps/search/?api=1&query={query.replace(' ', '+')}"
+    webbrowser.open(url)
+
+
+def prop(JBNUM):
+    """Create the Property Information logging UI."""
+    prop_window = tk.Tk()
+    prop_window.title("Property Information - Research Log")
+    prop_window.geometry("475x325")
+    prop_window.resizable(False, False)
+
+    def submit_info():
+        """Submit property info to the database."""
+        address, city_town, state, parcel_id = e_addy.get(), e_town.get(), e_state.get(), e_pid.get()
+        if not prop_validate(address, city_town, state, parcel_id):
+            messagebox.showerror("Error", "All fields must be filled out correctly!")
+            return
         
-        # Setting up the notebook (tabs)
-        self.notebook = ttk.Notebook(self.root)
-        self.tab1 = ttk.Frame(self.notebook)
-        self.tab2 = ttk.Frame(self.notebook)
-        self.tab3 = ttk.Frame(self.notebook)
-        self.tab4 = ttk.Frame(self.notebook)
+        create_db(JBNUM)
+        prop_log(JBNUM, address, city_town, state, parcel_id, f'{JBNUM}.res')
+        prop_log(JBNUM, address, city_town, state, parcel_id, 'SAJHIST.db')
+        messagebox.showinfo("Success", "Property information recorded!")
+        clear_form()
+
+    def clear_form():
+        """Clear the property entry form."""
+        e_addy.set('')
+        e_town.set('')
+        e_state.set('')
+        e_pid.set('')
+        e_addy['values'] = prop_history("address")
+        e_town['values'] = prop_history("city_town")
+        e_pid['values'] = prop_history("parcel_id")
+
+    # UI Elements
+    tk.Label(prop_window, text="Address:").pack()
+    e_addy = ttk.Combobox(prop_window, values=prop_history("address"), width=37)
+    e_addy.pack()
+
+    tk.Label(prop_window, text="City/Town:").pack()
+    e_town = ttk.Combobox(prop_window, values=prop_history("city_town"), width=37)
+    e_town.pack()
+
+    tk.Label(prop_window, text="State:").pack()
+    states = ["Alabama", "Alaska", "Arizona", "Arkansas", "California"]  # Add all states
+    e_state = ttk.Combobox(prop_window, values=states, width=37)
+    e_state.pack()
+
+    tk.Label(prop_window, text="Parcel ID:").pack()
+    e_pid = ttk.Combobox(prop_window, values=prop_history("parcel_id"), width=37)
+    e_pid.pack()
+
+    # Buttons
+    frame = tk.Frame(prop_window)
+    frame.pack()
+    
+    tk.Button(frame, text="Submit", command=submit_info).pack(side=tk.LEFT, padx=5)
+    tk.Button(frame, text="Clear", command=clear_form).pack(side=tk.LEFT, padx=5)
+    tk.Button(frame, text="Open in Maps", command=lambda: prop_maps(e_addy.get(), e_town.get(), e_state.get())).pack(side=tk.LEFT, padx=5)
+    tk.Button(frame, text="Exit", command=prop_window.destroy).pack(side=tk.LEFT, padx=5)
+
+    prop_window.mainloop()
+
+
+def start():
+    """Create the start window UI."""
+    start_window = tk.Tk()
+    start_window.title("Welcome - Research Log")
+    start_window.geometry("325x182")
+    start_window.resizable(False, False)
+
+    def start_save():
+        """Handle entry validation and open Property Info window."""
+        job_num = e_raw.get().strip()
+        if not job_num or job_num == "Enter job number...":
+            messagebox.showerror("Error", "Entry cannot be left blank!")
+            return
+        if re.search(r'[!@#$%^&*(),.":{}|<>+=\[\]\\/;\'`~]', job_num):
+            messagebox.showerror("Error", "Only hyphens are allowed as special characters!")
+            return
         
-        self.notebook.add(self.tab1, text="Record Logger")
-        self.notebook.add(self.tab2, text="Renaming Suite")
-        self.notebook.add(self.tab3, text="File Viewer")
-        self.notebook.add(self.tab4, text="About")
-        self.notebook.pack(expand=True, fill="both")
-        
-        # UUID tracking
-        self.root_uuid = 1
+        start_window.destroy()
+        prop(job_num)
 
-        # Widgets for the first tab
-        self.setup_tab1()
+    # UI Elements
+    e_raw = tk.Entry(start_window, width=17, fg='grey')
+    e_raw.insert(0, "Enter job number...")
+    e_raw.pack(pady=10)
 
-    def setup_tab1(self):
-        # Frame for entries
-        entry_frame = ttk.Frame(self.tab1)
-        entry_frame.pack(pady=5)
+    tk.Button(start_window, text="Research", width=15, command=start_save).pack()
+    tk.Button(start_window, text="Exit", width=15, command=start_window.destroy).pack()
 
-        # Entry for document name with placeholder
-        self.document_entry = ttk.Entry(entry_frame, width=30)
-        self.document_entry.insert(0, "Enter Document Name")
-        self.document_entry.bind("<FocusIn>", self.clear_placeholder)
-        self.document_entry.bind("<FocusOut>", self.set_placeholder)
-        self.document_entry.pack(side="left", padx=5)
+    start_window.mainloop()
 
-        # Entry for comments with placeholder
-        self.comments_entry = ttk.Entry(entry_frame, width=30)
-        self.comments_entry.insert(0, "Enter Comments")
-        self.comments_entry.bind("<FocusIn>", self.clear_placeholder)
-        self.comments_entry.bind("<FocusOut>", self.set_placeholder)
-        self.comments_entry.pack(side="left", padx=5)
-
-        # Bind Enter key to add record for both entry fields
-        self.document_entry.bind("<Return>", self.add_record)
-        self.comments_entry.bind("<Return>", self.add_record)
-
-        # Frame for the header
-        header_frame = ttk.Frame(self.tab1)
-        header_frame.pack(fill="x")
-
-        # Header labels
-        ttk.Label(header_frame, text="Expand", width=10).pack(side="left")
-        ttk.Label(header_frame, text="Document Name", width=30).pack(side="left")
-        ttk.Label(header_frame, text="Comments", width=30).pack(side="left")
-
-        # Frame for the Treeview and scrollbar
-        tree_frame = ttk.Frame(self.tab1)
-        tree_frame.pack(expand=True, fill="both", padx=5, pady=(5, 0))
-
-        # Scrollbar
-        self.tree_scroll = ttk.Scrollbar(tree_frame)
-        self.tree_scroll.pack(side="right", fill="y")
-
-        # Treeview for displaying records
-        self.tree = ttk.Treeview(tree_frame, columns=("Document", "Comments"), show="tree")
-        
-        # Configure the Treeview
-        self.tree.heading("#0", text="Expand")  # Caret placeholder
-        self.tree.heading("Document", text="Document Name")
-        self.tree.heading("Comments", text="Comments")
-
-        # Set column widths
-        self.tree.column("#0", width=50)  # For expand/collapse icon
-        self.tree.column("Document", width=150)
-        self.tree.column("Comments", width=150)
-
-        # Pack the Treeview
-        self.tree.pack(expand=True, fill="both")
-
-        # Configure the scrollbar
-        self.tree_scroll.config(command=self.tree.yview)
-        self.tree.config(yscrollcommand=self.tree_scroll.set)
-
-        # Frame for buttons
-        button_frame = ttk.Frame(self.tab1)
-        button_frame.pack(pady=5)
-
-        # Buttons
-        self.add_button = ttk.Button(button_frame, text="Add Record", command=self.add_record)
-        self.remove_button = ttk.Button(button_frame, text="Remove Record", command=self.remove_record)
-        self.edit_button = ttk.Button(button_frame, text="Edit Record", command=self.edit_record)
-        self.add_button.pack(side="left", padx=5)
-        self.remove_button.pack(side="left", padx=5)
-        self.edit_button.pack(side="left", padx=5)
-
-        # Add bindings for caret click
-        self.tree.bind("<ButtonRelease-1>", self.on_caret_click)
-
-    def clear_placeholder(self, event):
-        if event.widget.get() == "Enter Document Name" or event.widget.get() == "Enter Comments":
-            event.widget.delete(0, tk.END)
-
-    def set_placeholder(self, event):
-        if event.widget.get() == "":
-            if event.widget is self.document_entry:
-                event.widget.insert(0, "Enter Document Name")
-            else:
-                event.widget.insert(0, "Enter Comments")
-
-    def on_caret_click(self, event):
-        # Get the item at the clicked position
-        item = self.tree.identify_row(event.y)
-        if item:  # Check if an item was clicked
-            # Toggle the expansion state of the clicked item
-            is_open = self.tree.item(item, "open")
-            self.tree.item(item, open=not is_open)  # Toggle open state
-
-    def generate_uuid(self):
-        base_uuid = self.root_uuid
-        while True:
-            if not self.tree.exists(str(base_uuid)):
-                return str(base_uuid)
-            base_uuid += 1
-
-    def add_record(self, event=None):
-        doc_name = self.document_entry.get()
-        comments = self.comments_entry.get()
-        
-        # Prevent adding empty records
-        if doc_name == "Enter Document Name" or comments == "Enter Comments":
-            doc_name = ""
-            comments = ""
-        
-        uuid_value = self.generate_uuid()
-        
-        # Insert the new record
-        self.tree.insert("", "end", iid=uuid_value, text="", values=("", doc_name, comments))
-        
-        # Automatically expand parent if it's a child
-        if '.' in uuid_value:
-            parent_uuid = '.'.join(uuid_value.split('.')[:-1])
-            self.tree.item(parent_uuid, open=True)
-
-        self.tree.see(uuid_value)  # Make sure the new entry is visible
-
-        # Clear the input fields
-        self.document_entry.delete(0, tk.END)
-        self.comments_entry.delete(0, tk.END)
-        
-        # Set focus back to the document entry
-        self.document_entry.focus_set()
-
-    def remove_record(self):
-        selected_item = self.tree.selection()
-        if selected_item:
-            self.tree.delete(selected_item)
-
-    def edit_record(self):
-        selected_item = self.tree.selection()
-        
-        if selected_item:
-            # Get the selected item (there should only be one)
-            selected_uuid = selected_item[0]
-            
-            # Get the current values in the entry fields
-            doc_name = self.document_entry.get()
-            comments = self.comments_entry.get()
-            
-            # Check if the entries are not just placeholders
-            if doc_name == "Enter Document Name" or comments == "Enter Comments":
-                messagebox.showwarning("Warning", "Please enter valid document name and comments.")
-                return
-
-            # Update the selected record in the Treeview with the new values
-            self.tree.item(selected_uuid, values=("", doc_name, comments))
-
-            # Clear the input fields and set focus back to the document entry
-            self.document_entry.delete(0, tk.END)
-            self.comments_entry.delete(0, tk.END)
-            self.document_entry.focus_set()
-        else:
-            messagebox.showwarning("Warning", "No record selected for editing.")
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = LandRecordOrganizer(root)
-    root.mainloop()
-
-
-
-#BROKENNNNNNNNNNNNNN
+    start()

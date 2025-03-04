@@ -191,6 +191,9 @@ class BulkRenamer:
             if not self.files:
                 messagebox.showwarning("No Recent Files", "No files found from the last hour.")
 
+            # Populate the treeview with the files that were loaded
+            self.populate_treeview()
+
         except FileNotFoundError:
             messagebox.showerror("Error", "Selected folder not found!")
 
@@ -248,7 +251,6 @@ def main():
     root = tk.Tk()
     app = BulkRenamer(root)
     root.mainloop()
-
 
 if __name__ == "__main__":
     main()
