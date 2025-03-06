@@ -1,172 +1,157 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
-import sqlite3
-import os
-import re
-import webbrowser
-import socket
-from datetime import datetime
+from tkinter import ttk, messagebox
 
-# Import custom utilities if needed
-try:
-    from UTILITY import date_time as dt
-    from UTILITY import other as o
-    from UTILITY import Hovertip
-    from UTILITY import string_test as st
-except ImportError:
-    print("UTILITY modules not found! Make sure they are available.")
-
-# Global Variables
-JBNUM_RAW = ""
-current_window = None
-delay = 3500  # Default delay for notifications
-
-
-def create_db(JBNUM):
-    """Create a database for the given JBNUM if it does not exist."""
-    conn = sqlite3.connect(f'{JBNUM}.res')
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS property (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        address TEXT NOT NULL,
-                        city_town TEXT NOT NULL,
-                        state TEXT NOT NULL,
-                        parcel_id TEXT NOT NULL)''')
-    conn.commit()
-    conn.close()
-
-
-def prop_log(JBNUM, address, city_town, state, parcel_id, db_file):
-    """Log property data into the given database file."""
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO property (address, city_town, state, parcel_id) VALUES (?, ?, ?, ?)",
-                   (address, city_town, state, parcel_id))
-    conn.commit()
-    conn.close()
-
-
-def prop_history(history_type):
-    """Fetch property history based on type (city_town, address, parcel_id)."""
-    db_file = 'SAJHIST.db'
-    if not os.path.isfile(db_file):
-        return []
-    
-    try:
-        with sqlite3.connect(db_file) as conn:
-            cursor = conn.cursor()
-            query = f"SELECT DISTINCT {history_type} FROM property ORDER BY id DESC LIMIT 5"
-            cursor.execute(query)
-            history = [row[0] for row in cursor.fetchall() if row[0]]
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-        return []
-    
-    return history
-
-
-def prop_validate(address, city_town, state, parcel_id):
-    """Validate property input fields."""
-    return all([address, city_town, state, parcel_id])
-
-
-def prop_maps(address, city_town, state, event=None):
-    """Open property location in Google Maps."""
-    query = f"{address}, {city_town}, {state}"
-    url = f"https://www.google.com/maps/search/?api=1&query={query.replace(' ', '+')}"
-    webbrowser.open(url)
-
-
-def prop(JBNUM):
-    """Create the Property Information logging UI."""
-    prop_window = tk.Tk()
-    prop_window.title("Property Information - Research Log")
-    prop_window.geometry("475x325")
-    prop_window.resizable(False, False)
-
-    def submit_info():
-        """Submit property info to the database."""
-        address, city_town, state, parcel_id = e_addy.get(), e_town.get(), e_state.get(), e_pid.get()
-        if not prop_validate(address, city_town, state, parcel_id):
-            messagebox.showerror("Error", "All fields must be filled out correctly!")
-            return
+class LandRecordOrganizer:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Land Record Research Organizer")
         
-        create_db(JBNUM)
-        prop_log(JBNUM, address, city_town, state, parcel_id, f'{JBNUM}.res')
-        prop_log(JBNUM, address, city_town, state, parcel_id, 'SAJHIST.db')
-        messagebox.showinfo("Success", "Property information recorded!")
-        clear_form()
+        # UUID tracking
+        self.root_uuid = 1
+        self.current_selected_uuid = None
 
-    def clear_form():
-        """Clear the property entry form."""
-        e_addy.set('')
-        e_town.set('')
-        e_state.set('')
-        e_pid.set('')
-        e_addy['values'] = prop_history("address")
-        e_town['values'] = prop_history("city_town")
-        e_pid['values'] = prop_history("parcel_id")
+        # Setup main UI
+        self.setup_ui()
 
-    # UI Elements
-    tk.Label(prop_window, text="Address:").pack()
-    e_addy = ttk.Combobox(prop_window, values=prop_history("address"), width=37)
-    e_addy.pack()
+    def setup_ui(self):
+        # Frame for entries
+        entry_frame = ttk.Frame(self.root)
+        entry_frame.pack(pady=5)
 
-    tk.Label(prop_window, text="City/Town:").pack()
-    e_town = ttk.Combobox(prop_window, values=prop_history("city_town"), width=37)
-    e_town.pack()
+        # Entry for document name with placeholder
+        self.document_entry = ttk.Entry(entry_frame, width=30)
+        self.document_entry.insert(0, "Enter Document Name")
+        self.document_entry.bind("<FocusIn>", self.clear_placeholder)
+        self.document_entry.bind("<FocusOut>", self.set_placeholder)
+        self.document_entry.pack(side="left", padx=5)
 
-    tk.Label(prop_window, text="State:").pack()
-    states = ["Alabama", "Alaska", "Arizona", "Arkansas", "California"]  # Add all states
-    e_state = ttk.Combobox(prop_window, values=states, width=37)
-    e_state.pack()
+        # Entry for comments with placeholder
+        self.comments_entry = ttk.Entry(entry_frame, width=30)
+        self.comments_entry.insert(0, "Enter Comments")
+        self.comments_entry.bind("<FocusIn>", self.clear_placeholder)
+        self.comments_entry.bind("<FocusOut>", self.set_placeholder)
+        self.comments_entry.pack(side="left", padx=5)
 
-    tk.Label(prop_window, text="Parcel ID:").pack()
-    e_pid = ttk.Combobox(prop_window, values=prop_history("parcel_id"), width=37)
-    e_pid.pack()
+        # Bind Enter key to add record
+        self.document_entry.bind("<Return>", self.add_record)
+        self.comments_entry.bind("<Return>", self.add_record)
 
-    # Buttons
-    frame = tk.Frame(prop_window)
-    frame.pack()
-    
-    tk.Button(frame, text="Submit", command=submit_info).pack(side=tk.LEFT, padx=5)
-    tk.Button(frame, text="Clear", command=clear_form).pack(side=tk.LEFT, padx=5)
-    tk.Button(frame, text="Open in Maps", command=lambda: prop_maps(e_addy.get(), e_town.get(), e_state.get())).pack(side=tk.LEFT, padx=5)
-    tk.Button(frame, text="Exit", command=prop_window.destroy).pack(side=tk.LEFT, padx=5)
+        # Frame for the Treeview and scrollbar
+        tree_frame = ttk.Frame(self.root)
+        tree_frame.pack(expand=True, fill="both", padx=5, pady=(5, 0))
 
-    prop_window.mainloop()
+        # Scrollbar
+        self.tree_scroll = ttk.Scrollbar(tree_frame)
+        self.tree_scroll.pack(side="right", fill="y")
 
+        # Treeview
+        self.tree = ttk.Treeview(tree_frame, columns=("Document", "Comments"), show="tree", yscrollcommand=self.tree_scroll.set)
+        self.tree.heading("#0", text="UUID")
+        self.tree.heading("Document", text="Document Name")
+        self.tree.heading("Comments", text="Comments")
+        self.tree.pack(expand=True, fill="both")
 
-def start():
-    """Create the start window UI."""
-    start_window = tk.Tk()
-    start_window.title("Welcome - Research Log")
-    start_window.geometry("325x182")
-    start_window.resizable(False, False)
+        self.tree_scroll.config(command=self.tree.yview)
 
-    def start_save():
-        """Handle entry validation and open Property Info window."""
-        job_num = e_raw.get().strip()
-        if not job_num or job_num == "Enter job number...":
-            messagebox.showerror("Error", "Entry cannot be left blank!")
+        self.tree.bind("<<TreeviewSelect>>", self.on_treeview_select)
+        self.tree.bind("<Double-1>", self.deselect_item)
+
+        # Frame for buttons
+        button_frame = ttk.Frame(self.root)
+        button_frame.pack(pady=5)
+
+        # Buttons
+        ttk.Button(button_frame, text="Add Record", command=self.add_record).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Remove Record", command=self.remove_record).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Edit Record", command=self.edit_record).pack(side="left", padx=5)
+
+    def clear_placeholder(self, event):
+        if event.widget.get() in ("Enter Document Name", "Enter Comments"):
+            event.widget.delete(0, tk.END)
+
+    def set_placeholder(self, event):
+        if not event.widget.get():
+            event.widget.insert(0, "Enter Document Name" if event.widget is self.document_entry else "Enter Comments")
+
+    def on_treeview_select(self, event):
+        selected_item = self.tree.selection()
+        if selected_item:
+            self.current_selected_uuid = selected_item[0]
+            doc_name, comments = self.tree.item(self.current_selected_uuid, 'values')
+            self.document_entry.delete(0, tk.END)
+            self.document_entry.insert(0, doc_name)
+            self.comments_entry.delete(0, tk.END)
+            self.comments_entry.insert(0, comments)
+            self.document_entry.focus_set()
+        else:
+            self.current_selected_uuid = None
+
+    def generate_uuid(self):
+        base_uuid = self.root_uuid if not self.current_selected_uuid else self.current_selected_uuid
+        index = 1
+        while True:
+            new_uuid = f"{base_uuid}.{index}" if self.current_selected_uuid else str(base_uuid)
+            if not self.tree.exists(new_uuid):
+                return new_uuid
+            index += 1
+
+    def add_record(self, event=None):
+        doc_name = self.document_entry.get().strip()
+        comments = self.comments_entry.get().strip()
+        if not doc_name or not comments:
             return
-        if re.search(r'[!@#$%^&*(),.":{}|<>+=\[\]\\/;\'`~]', job_num):
-            messagebox.showerror("Error", "Only hyphens are allowed as special characters!")
+
+        uuid_value = self.generate_uuid()
+        parent_uuid = "" if '.' not in uuid_value else '.'.join(uuid_value.split('.')[:-1])
+        self.tree.insert(parent_uuid, "end", iid=uuid_value, text=uuid_value, values=(doc_name, comments))
+        if parent_uuid:
+            self.tree.item(parent_uuid, open=True)
+        self.tree.see(uuid_value)
+        self.sort_treeview()
+        self.document_entry.delete(0, tk.END)
+        self.comments_entry.delete(0, tk.END)
+        self.document_entry.focus_set()
+        if not self.current_selected_uuid:
+            self.root_uuid += 1
+
+    def remove_record(self):
+        selected_item = self.tree.selection()
+        if selected_item:
+            self.tree.delete(selected_item)
+            self.sort_treeview()
+            self.document_entry.focus_set()
+
+    def edit_record(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Warning", "No record selected for editing.")
             return
-        
-        start_window.destroy()
-        prop(job_num)
 
-    # UI Elements
-    e_raw = tk.Entry(start_window, width=17, fg='grey')
-    e_raw.insert(0, "Enter job number...")
-    e_raw.pack(pady=10)
+        selected_uuid = selected_item[0]
+        doc_name = self.document_entry.get().strip()
+        comments = self.comments_entry.get().strip()
+        if not doc_name or not comments:
+            messagebox.showwarning("Warning", "Please enter valid document name and comments.")
+            return
 
-    tk.Button(start_window, text="Research", width=15, command=start_save).pack()
-    tk.Button(start_window, text="Exit", width=15, command=start_window.destroy).pack()
+        self.tree.item(selected_uuid, values=(doc_name, comments))
+        self.document_entry.delete(0, tk.END)
+        self.comments_entry.delete(0, tk.END)
+        self.document_entry.focus_set()
 
-    start_window.mainloop()
+    def deselect_item(self, event):
+        self.tree.selection_remove(self.tree.selection())
 
+    def sort_treeview(self):
+        def recursive_sort(parent=""):
+            children = self.tree.get_children(parent)
+            sorted_children = sorted(children, key=lambda x: list(map(int, x.split('.'))))
+            for index, child in enumerate(sorted_children):
+                self.tree.move(child, parent, index)
+                recursive_sort(child)
+        recursive_sort()
 
 if __name__ == "__main__":
-    start()
+    root = tk.Tk()
+    app = LandRecordOrganizer(root)
+    root.mainloop()
