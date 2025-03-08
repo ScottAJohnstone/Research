@@ -5,7 +5,7 @@ import json
 class LandRecordOrganizer:
     def __init__(self, root):
         self.root = root
-        self.root.title("Land Record Document Organizer")
+        self.root.title("Reseach Log - Logger")
         self.root.geometry("600x500")  # Set a more compact window size
         
         self.style = ttk.Style()
@@ -64,10 +64,12 @@ class LandRecordOrganizer:
         self.entry_name.focus()  # Focus on the document name entry at startup
     
     def clear_placeholder(self, event):
+        """Clear placeholder text when the user starts typing"""
         if event.widget.get() == "Document Name" or event.widget.get() == "Comments":
             event.widget.delete(0, tk.END)
     
     def restore_placeholder(self, event):
+        """Restore placeholder text if the user didn't type anything"""
         if not event.widget.get():
             if event.widget == self.entry_name:
                 event.widget.insert(0, "Document Name")
