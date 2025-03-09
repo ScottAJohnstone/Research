@@ -1,13 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
-import rename  #rename.py
+from idlelib.tooltip import Hovertip
+import rename  # rename.py
+import research  # research.py
 
 class TabbedApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Research Log")
-        stht = 350
-        stwi = 800
+        
+        stht = 400
+        stwi = 850
         screenht = self.root.winfo_screenheight()
         screenwi = self.root.winfo_screenwidth()
         x = (screenwi / 2) - (stwi / 2)
@@ -22,25 +25,32 @@ class TabbedApp:
         # Create Tabs
         self.create_tabs()
 
+        # Bind the tab change event
+        self.notebook.bind("<<NotebookTabChanged>>", self.refresh_display)
+
     def create_tabs(self):
-        # Tab 1
-        tab1 = ttk.Frame(self.notebook)
-        self.notebook.add(tab1, text="Research Logger")
-        #tk.Label(tab1, text="Welcome to the Home Tab!", font=("Arial", 14)).pack(pady=20)
+        # Tab 1 - Research Logger
+        self.tab1 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab1, text="Research Logger")
+        research.main(self.tab1)
 
-        # Tab 2 - Load rename.py
-        tab2 = ttk.Frame(self.notebook)
-        self.notebook.add(tab2, text="Renaming Suite")
-        # Run external script inside Tab 2
-        rename.main(tab2)  # Pass tab2 as the parent
+        # Tab 2 - Renaming Suite
+        self.tab2 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab2, text="Renaming Suite")
+        rename.main(self.tab2)  # Load rename.py into tab
 
-        # Tab 3 - Load fileviewer.py
-        tab3 = ttk.Frame(self.notebook)
-        self.notebook.add(tab3, text="File Viewer")
+        # Tab 3 - File Viewer
+        self.tab3 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab3, text="File Viewer")
 
-        # Tab 4 - Load fileviewer.py
-        tab4 = ttk.Frame(self.notebook)
-        self.notebook.add(tab4, text="Help") 
+        # Tab 4 - Help
+        self.tab4 = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab4, text="Help")
+
+    def refresh_display(self, event):
+        #Forces a UI refresh when switching tabs.
+        self.root.update_idletasks()
+        self.root.update()
 
 if __name__ == "__main__":
     root = tk.Tk()
