@@ -94,7 +94,7 @@ class LandRecordOrganizer:
 
         self.records[new_uuid] = {"name": doc_name, "comments": comments}
 
-        if self.entry_name.get() == "Document Name":
+        if self.entry_name.get() == "Document Name":#TTTTTTTTTTTTTT
             messagebox.showwarning("Warning", "Must Enter a Document.")
             return
 
