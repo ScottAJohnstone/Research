@@ -1,195 +1,78 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
-import glob
-import datetime
 
-# Function to get the most recent files based on creation time
-def get_recent_files(download_folder):
-    # Get all files in the Downloads folder
-    files = glob.glob(os.path.join(download_folder, "*"))
-    
-    # Filter only files (ignore directories)
-    files = [f for f in files if os.path.isfile(f)]
-    
-    # Sort files by the creation time (descending)
-    files.sort(key=lambda x: os.path.getctime(x), reverse=True)
-    
-    # Group files by the same creation date (same date added)
-    if not files:
-        return []
+class TabContextMenuApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Right-Click Menu in Tabs")
 
-    most_recent_time = os.path.getctime(files[0])
-    recent_files = [f for f in files if abs(os.path.getctime(f) - most_recent_time) < 1]
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(expand=True, fill='both')
 
-    return recent_files
+        self.shared_menu = tk.Menu(root, tearoff=0)
+        self.shared_menu.add_command(label="Cut", command=lambda: self.shared_action("Cut"))
+        self.shared_menu.add_command(label="Copy", command=lambda: self.shared_action("Copy"))
+        self.shared_menu.add_command(label="Paste", command=lambda: self.shared_action("Paste"))
+        self.shared_menu.add_separator()
 
-# Function to update the preview filename
-def update_preview_filename(tree):
-    for item in tree.get_children():
-        original_filename = tree.item(item)["text"]
-        new_name = tree.item(item)["values"][0]
-        preview_filename = os.path.join(os.path.dirname(original_filename), new_name)
-        tree.item(item, values=(new_name, preview_filename))
+        # Dictionary to hold tab-specific options
+        self.tab_specific_options = {}
 
-# Function to handle file renaming
-def rename_files(tree):
-    selected_files = [tree.item(item)["text"] for item in tree.selection()]
-    
-    if not selected_files:
-        messagebox.showwarning("No Selection", "No files selected.")
-        return
-    
-    # Confirm rename action
-    if messagebox.askyesno("Confirm Rename", f"Do you want to rename the selected files?"):
-        for item in tree.selection():
-            original_file = tree.item(item)["text"]
-            new_filename = tree.item(item)["values"][1]  # Previewed filename (new name)
-            
-            try:
-                os.rename(original_file, new_filename)
-                tree.item(item, values=(os.path.basename(new_filename), new_filename))
-            except Exception as e:
-                messagebox.showerror("Error", f"Error renaming file {original_file}: {e}")
-                
-        messagebox.showinfo("Success", "Selected files have been renamed.")
+        # Create tabs with unique options
+        self.create_tab("Tab 1", [("Rename", lambda: self.tab_action("Rename in Tab 1"))])
+        self.create_tab("Tab 2", [("Export", lambda: self.tab_action("Export from Tab 2"))])
+        self.create_tab("Tab 3", [("Generate Report", lambda: self.tab_action("Report from Tab 3"))])
 
-# Function to populate the treeview with the recent files
-def populate_treeview(tree, recent_files):
-    # Clear the current items in the treeview
-    for i in tree.get_children():
-        tree.delete(i)
-    
-    # Insert the new files into the treeview
-    for file in recent_files:
-        filename = os.path.basename(file)
-        preview_filename = filename  # Initially, the preview is the same as the original name
-        tree.insert("", "end", text=file, values=(filename, preview_filename))
+    def create_tab(self, title, unique_options):
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text=title)
 
-# Function to handle file selection
-def handle_selection(tree):
-    selected_files = [tree.item(item)["text"] for item in tree.selection()]
-    if selected_files:
-        messagebox.showinfo("Selected Files", f"Selected files:\n" + "\n".join(selected_files))
-    else:
-        messagebox.showwarning("No Selection", "No files selected.")
+        tree = ttk.Treeview(frame, columns=("A", "B"), show="headings")
+        tree.heading("A", text="Column A")
+        tree.heading("B", text="Column B")
+        tree.pack(expand=True, fill='both')
 
-# Main Tkinter window
-def main():
-    download_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+        for i in range(5):
+            tree.insert("", "end", values=(f"{title} Row {i}", f"Value {i}"))
 
-    # Create the root Tkinter window
-    root = tk.Tk()
-    root.title("Bulk File Renamer - Recent Files in Downloads")
-    root.geometry("800x500")
+        tree.bind("<Button-3>", self.show_context_menu)  # Right-click
+        self.tab_specific_options[frame] = unique_options
 
-    # Create the Treeview with an additional Preview Filename column
-    tree = ttk.Treeview(root, columns=("Filename", "Preview Filename"), show="headings")
-    tree.heading("Filename", text="Filename")
-    tree.heading("Preview Filename", text="Preview Filename")
-    tree.pack(fill=tk.BOTH, expand=True)
+    def show_context_menu(self, event):
+        widget = event.widget
+        current_tab = self.notebook.nametowidget(self.notebook.select())
 
-    # Create buttons
-    refresh_button = tk.Button(root, text="Refresh", command=lambda: refresh_files(tree, download_folder))
-    refresh_button.pack(pady=10)
-    
-    rename_button = tk.Button(root, text="Rename Selected Files", command=lambda: rename_files(tree))
-    rename_button.pack(pady=10)
+        # Clear tab-specific items if already appended
+        index = self.shared_menu.index("end")
+        while index is not None:
+            label = self.shared_menu.entrycget(index, "label")
+            if label == "Paste":
+                break
+            self.shared_menu.delete(index)
+            index -= 1
 
-    # Initially populate the tree with recent files
-    refresh_files(tree, download_folder)
+        # Add current tab's specific options
+        for label, command in self.tab_specific_options.get(current_tab, []):
+            self.shared_menu.add_command(label=label, command=command)
 
-    # Start the Tkinter event loop
-    root.mainloop()
+        # Optional: select row under cursor
+        if isinstance(widget, ttk.Treeview):
+            row_id = widget.identify_row(event.y)
+            if row_id:
+                widget.selection_set(row_id)
+            else:
+                widget.selection_remove(widget.selection())
 
-def refresh_files(tree, download_folder):
-    """ Refresh the file list in the treeview """
-    recent_files = get_recent_files(download_folder)
-    populate_treeview(tree, recent_files)
-    update_preview_filename(tree)  # Update the previewed filenames after refreshing
+        self.shared_menu.tk_popup(event.x_root, event.y_root)
 
+    def shared_action(self, action_name):
+        messagebox.showinfo("Shared Action", f"{action_name} selected")
+
+    def tab_action(self, action_name):
+        messagebox.showinfo("Tab-Specific Action", f"{action_name} selected")
+
+# Run the application
 if __name__ == "__main__":
-    main()
-
-
-
-
-# import tkinter as tk
-# from tkinter import ttk, messagebox
-# import os
-# import glob
-# import datetime
-
-# # Function to get the most recent files based on creation time
-# def get_recent_files(download_folder):
-#     # Get all files in the Downloads folder
-#     files = glob.glob(os.path.join(download_folder, "*"))
-    
-#     # Filter only files (ignore directories)
-#     files = [f for f in files if os.path.isfile(f)]
-    
-#     # Sort files by the creation time (descending)
-#     files.sort(key=lambda x: os.path.getctime(x), reverse=True)
-    
-#     # Group files by the same creation date (same date added)
-#     if not files:
-#         return []
-
-#     most_recent_time = os.path.getctime(files[0])
-#     recent_files = [f for f in files if abs(os.path.getctime(f) - most_recent_time) < 1]
-
-#     return recent_files
-
-# # Function to populate the treeview with the recent files
-# def populate_treeview(tree, recent_files):
-#     # Clear the current items in the treeview
-#     for i in tree.get_children():
-#         tree.delete(i)
-    
-#     # Insert the new files into the treeview
-#     for file in recent_files:
-#         tree.insert("", "end", text=file, values=(os.path.basename(file), datetime.datetime.fromtimestamp(os.path.getctime(file)).strftime('%Y-%m-%d %H:%M:%S')))
-
-# # Function to handle file selection
-# def handle_selection(tree):
-#     selected_files = [tree.item(item)["text"] for item in tree.selection()]
-#     if selected_files:
-#         messagebox.showinfo("Selected Files", f"Selected files:\n" + "\n".join(selected_files))
-#     else:
-#         messagebox.showwarning("No Selection", "No files selected.")
-
-# # Main Tkinter window
-# def main():
-#     download_folder = os.path.join(os.path.expanduser("~"), "Downloads")
-
-#     # Create the root Tkinter window
-#     root = tk.Tk()
-#     root.title("Recent Files in Downloads")
-#     root.geometry("600x400")
-
-#     # Create the Treeview
-#     tree = ttk.Treeview(root, columns=("Filename", "Date Added"), show="headings")
-#     tree.heading("Filename", text="Filename")
-#     tree.heading("Date Added", text="Date Added")
-#     tree.pack(fill=tk.BOTH, expand=True)
-
-#     # Create buttons
-#     refresh_button = tk.Button(root, text="Refresh", command=lambda: refresh_files(tree, download_folder))
-#     refresh_button.pack(pady=10)
-    
-#     select_button = tk.Button(root, text="Select Files", command=lambda: handle_selection(tree))
-#     select_button.pack(pady=10)
-
-#     # Initially populate the tree with recent files
-#     refresh_files(tree, download_folder)
-
-#     # Start the Tkinter event loop
-#     root.mainloop()
-
-# def refresh_files(tree, download_folder):
-#     """ Refresh the file list in the treeview """
-#     recent_files = get_recent_files(download_folder)
-#     populate_treeview(tree, recent_files)
-
-# if __name__ == "__main__":
-#     main()
+    root = tk.Tk()
+    app = TabContextMenuApp(root)
+    root.mainloop()
