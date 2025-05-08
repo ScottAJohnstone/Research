@@ -178,24 +178,41 @@ class BulkRenamer:
         except FileNotFoundError:
             messagebox.showerror("Error", "Selected folder not found!")
 
-    def apply_rename_logic(self):                                                               
+
+    def apply_rename_logic(self):
         all_files = self.selected_files + self.files
+
         for i, (file_path, original_name) in enumerate(all_files):
             name, ext = os.path.splitext(original_name)
+
+            # Default to keeping the original name unless we match a pattern
+            proposed_name = name + ext
+
+            # Case 1: Entire name is just digits
             if name.isdigit():
                 proposed_name = f"Map #{name}" + ext
+
+            # Case 2: Name is digits followed directly by letters, e.g. "123abc"
+            elif re.fullmatch(r'\d+[a-zA-Z]+', name):
+                match = re.fullmatch(r'(\d+)([a-zA-Z]+)', name)
+                if match:
+                    number, letters = match.groups()
+                    proposed_name = f"Map #{number}({letters.capitalize()})" + ext
+
+            # Case 3: Name is of the form "123-456" or similar
             elif '-' in name:
                 parts = name.split('-')
                 if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
                     proposed_name = f"Vol.{parts[0]} - Pg.{parts[1]}" + ext
                 else:
-                    proposed_name = name + ext
-            else:
-                proposed_name = name + ext
+                    proposed_name = name + ext  # fallback for non-matching dash cases
+
+            # Store the renamed file in the appropriate list
             if i < len(self.selected_files):
                 self.selected_files[i] = (file_path, proposed_name)
             else:
                 self.files[i - len(self.selected_files)] = (file_path, proposed_name)
+
 
     def populate_treeview(self):
         for row in self.treeview.get_children():
