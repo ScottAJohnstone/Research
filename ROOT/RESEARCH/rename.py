@@ -12,6 +12,10 @@ class BulkRenamer:
     def __init__(self, root):
         self.root = root
 
+        self.style = ttk.Style()
+        self.style.configure("TButton", padding=6, relief="flat", background="#4CAF50", font=('Arial', 10))
+        self.style.configure("TLabel", font=('Arial', 10))
+
         self.prefix = tk.StringVar(value=f'{jobnum}_')                    
         self.suffix = tk.StringVar(value="")
         self.custom_attributes = tk.BooleanVar(value=False)
@@ -26,6 +30,9 @@ class BulkRenamer:
     def setup_ui(self):
         button_frame = tk.Frame(self.root)
         button_frame.pack(pady=10)
+        #button_frame.cget()
+        #button_frame.configure(background=notebook.cget("background"))
+
 
         self.configure_button = tk.Button(button_frame, text="Configure", command=self.open_configure_window)
         self.configure_button.pack(side=tk.RIGHT, padx=10)
@@ -43,6 +50,8 @@ class BulkRenamer:
         self.treeview.heading("Proposed", text="Proposed Filename")
         self.treeview.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
         self.treeview.bind("<Double-1>", self.on_proposed_name_click)
+        self.treeview.tag_configure("rename_valid", foreground="blue")
+        self.treeview.tag_configure("rename_invalid", foreground="red")
 
     def select_files(self):
         file_paths = [f for f in filedialog.askopenfilenames(title="Select Files", filetypes=[("All Files", "*.*")]) 
@@ -169,7 +178,7 @@ class BulkRenamer:
         except FileNotFoundError:
             messagebox.showerror("Error", "Selected folder not found!")
 
-    def apply_rename_logic(self):
+    def apply_rename_logic(self):                                                               
         all_files = self.selected_files + self.files
         for i, (file_path, original_name) in enumerate(all_files):
             name, ext = os.path.splitext(original_name)
@@ -198,31 +207,79 @@ class BulkRenamer:
         self.execute_button.config(state=tk.NORMAL)
 
     def execute_rename(self):
-        response = messagebox.askyesno("Confirm", "Do you wish to proceed?")
-        if response == True:
-            for item in self.treeview.get_children():
-                original_name, proposed_name = self.treeview.item(item, "values")
-                original_path = os.path.join(self.default_folder, original_name)
-                proposed_path = os.path.join(self.default_folder, proposed_name)
-                if original_name != proposed_name:
-                    try:
-                        os.rename(original_path, proposed_path)
-                    except Exception as e:
-                        messagebox.showerror("Error", f"Failed to rename {original_name}: {e}")
-                        return
-            messagebox.showinfo("Success", "Bulk renaming executed successfully!")
-        else:
+        for item in self.treeview.get_children():
+            original_name, proposed_name = self.treeview.item(item, "values")
+
+            # Try to find the full path for the original file
+            match = next(
+                (fp for fp, _ in self.selected_files + self.files if os.path.basename(fp) == original_name),
+                None
+                        )
+
+            if not match:
+                messagebox.showerror("Error", f"Original file path for {original_name} not found.")
+                continue
+
+            original_path = match
+            proposed_path = os.path.join(os.path.dirname(original_path), proposed_name)
+
+            if original_path != proposed_path:
+                try:
+                    os.rename(original_path, proposed_path)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to rename {original_name}: {e}")
+                    return
+
+        messagebox.showinfo("Success", "Files renamed successfully.")
+
+        
+    def on_proposed_name_click(self, event):                                #- NEED TO FIX FAST CLICK ISSUES
+        region = self.treeview.identify("region", event.x, event.y)
+        if region != "cell":
             return
 
-    def on_proposed_name_click(self, event):
-        item = self.treeview.identify('item', event.x, event.y)
-        if item:
-            original_name, proposed_name = self.treeview.item(item, "values")
-            name, ext = os.path.splitext(proposed_name)
-            new_name = askstring("Edit Filename", "Edit the proposed name:", initialvalue=name)
-            if new_name is not None:
-                self.treeview.item(item, values=(original_name, new_name + ext))
-                self.execute_button.config(state=tk.NORMAL)
+        row_id = self.treeview.identify_row(event.y)
+        column = self.treeview.identify_column(event.x)
+        if column != "#2":
+            return
+
+        x, y, width, height = self.treeview.bbox(row_id, column)
+        proposed_name = self.treeview.set(row_id, column)
+
+        entry = tk.Entry(self.treeview)
+        entry.place(x=x, y=y, width=width, height=height)
+        entry.insert(0, proposed_name)
+
+        name, ext = os.path.splitext(proposed_name)
+
+        def save_edit(event=None):
+            new_name = entry.get()
+            self.treeview.set(row_id, column, new_name)
+            entry.destroy()
+            self.treeview.focus_set()
+            self.treeview.item(row_id, tags="updated")
+            self.treeview.update_idletasks()
+
+        def cancel_edit(event=None):
+            entry.destroy()
+            self.treeview.focus_set()
+
+        entry.bind("<Return>", save_edit)
+        entry.bind("<Escape>", cancel_edit)
+        entry.bind("<FocusOut>", save_edit)            #! nnot working
+
+
+        # Focus and grab first, then selection in after()
+        entry.focus_set()
+        entry.grab_set()
+
+        def set_cursor_and_selection():
+            entry.selection_range(0, len(name))
+            entry.icursor(len(name))
+
+        # Delay the selection so it's applied correctly after grab.... this feels dumb
+        self.treeview.after(50, set_cursor_and_selection)
+
 
 def main(parent=None):
     if parent is None:

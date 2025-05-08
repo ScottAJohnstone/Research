@@ -36,7 +36,7 @@ class TabbedApp:
 
         # Tab 2 - Renaming Suite
         self.tab2 = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab2, text="Renaming Suite")
+        self.notebook.add(self.tab2, text="Renaming Suite") 
         rename.main(self.tab2)  # Load rename.py into tab
 
         # Tab 3 - File Viewer
