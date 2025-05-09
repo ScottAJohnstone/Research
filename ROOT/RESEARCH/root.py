@@ -112,11 +112,11 @@ class TabbedApp:
         self.root.focus_get().event_generate("<<Paste>>")
 
     def jump_to(self):
-        print("Jumping to Job Nmber...")                                                                 #-Needs Work
+        print("Jumping to Job Nmber...")                                                                #-Needs Work
 
     # Tab-specific example functions
     def add_research_entry(self):
-        print("Adding research entry...")                                                                #-Needs Work
+        print("Adding research entry...")                                                               #-Needs Work
 
     def revert_filenames(self):
         print("Reverting...")                                                                           #-Needs Work

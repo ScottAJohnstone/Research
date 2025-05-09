@@ -56,8 +56,19 @@ class LandRecordOrganizer:
         self.btn_log = ttk.Button(btn_frame, text="Log to File", command=self.log_to_file)
         self.btn_log.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
 
-        self.btn_help = ttk.Button(btn_frame, text="?", command=self.show_help)
+        self.btn_help = ttk.Button(btn_frame, text="    ?    ", command=self.show_help)
         self.btn_help.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
+
+        def is_abutter():
+            if abut.get():
+                print("Researching for Abutting Property")
+            else:
+                print("Researching for Subject Property")
+
+        abut = tk.IntVar()
+        abut.set(0)  # This makes the checkbox checked by default
+        self.cbox_abutter = ttk.Checkbutton(btn_frame, text="Abutter", variable=abut, command=is_abutter)
+        self.cbox_abutter.grid(row=0, column=4, padx=5, pady=5, sticky="ew")
 
         self.records = {}
         self.root.bind("<Return>", lambda event: self.add_record())
@@ -97,8 +108,9 @@ class LandRecordOrganizer:
         if self.entry_name.get() == "Document Name":#TTTTTTTTTTTTTT
             messagebox.showwarning("Warning", "Must Enter a Document.")
             return
-
-    
+        if self.entry_comments.get() == "Comments":
+            self.entry_comments.delete(0, tk.END)
+        
         if selected:
             self.tree.insert(selected[0], "end", iid=new_uuid, text=new_uuid, values=(new_uuid, doc_name, comments))
             self.tree.item(selected[0], open=True)  # Expand parent node
@@ -173,7 +185,7 @@ class LandRecordOrganizer:
         children = sorted(
             [k for k in self.records.keys() if (parent_uuid is None and "." not in k) or k.startswith(parent_uuid + ".")],
             key=lambda x: list(map(int, x.split(".")))  # Sort numerically
-        )
+                        )
 
         updated_records = {}
 

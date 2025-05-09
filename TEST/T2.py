@@ -1,16 +1,20 @@
 import tkinter as tk
 
-# Function to show right-click menu
-def show_right_click_menu(event):
-    print("Right-click detected at:", event.x, event.y)
+def on_spinbox_change():
+    value = spinbox.get()
+    print("Value changed to:", value)
 
-# Create the main window
 root = tk.Tk()
-root.title("Right-Click Test")
-root.geometry("400x300")
+root.geometry("300x200")
 
-# Bind the right-click event to show position
-root.bind("<Button-2>", show_right_click_menu)
+# Creating a Spinbox
+spinbox = tk.Spinbox(root, from_=0, to=100, width=10, relief="sunken", repeatdelay=500, repeatinterval=100,
+                     font=("Arial", 12), bg="lightgrey", fg="blue", command=on_spinbox_change)
 
-# Run the Tkinter main loop
+# Setting options for the Spinbox
+spinbox.config(state="normal", cursor="hand2", bd=3, justify="center", wrap=True)
+
+# Placing the Spinbox in the window
+spinbox.pack(padx=20, pady=20)
+
 root.mainloop()
