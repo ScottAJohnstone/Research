@@ -62,6 +62,8 @@ class LandRecordOrganizer:
         def is_abutter():
             if abut.get():
                 print("Researching for Abutting Property")
+                entry_abut = ttk.Combobox(btn_frame, values=[], width=20)
+                entry_abut.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
             else:
                 print("Researching for Subject Property")
 
@@ -82,7 +84,7 @@ class LandRecordOrganizer:
     def restore_placeholder(self, event):
         """Restore placeholder text if the user didn't type anything"""
         if not event.widget.get():
-            event.widget.insert(0, "Document Name" if event.widget == self.entry_name else "Comments")
+            event.widget.insert(0, "Document Number" if event.widget == self.entry_name else "Comments")
 
     def generate_uuid(self, parent_uuid):
         """Generate a new UUID following a hierarchical pattern"""
@@ -106,7 +108,7 @@ class LandRecordOrganizer:
         self.records[new_uuid] = {"name": doc_name, "comments": comments}
 
         if self.entry_name.get() == "Document Name":#TTTTTTTTTTTTTT
-            messagebox.showwarning("Warning", "Must Enter a Document.")
+            messagebox.showwarning("Warning", "Must Enter a Document Number.")
             return
         if self.entry_comments.get() == "Comments":
             self.entry_comments.delete(0, tk.END)

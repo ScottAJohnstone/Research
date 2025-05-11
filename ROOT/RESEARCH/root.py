@@ -1,8 +1,18 @@
+
+#. Research V2:	ROOT 
+#. Handle the organization and implementation of Title/Land Record documents and files.
+#. Runs Rename.py, Research.py, FileView.py in tabular model.
+
+#/                                                                                                               #/
+#/                                                                                                               #/
+
+
 import tkinter as tk
 from tkinter import ttk
 from idlelib.tooltip import Hovertip
 import rename  # rename.py
 import research  # research.py
+
 
 class TabbedApp:
     def __init__(self, root):
