@@ -124,7 +124,7 @@ class TabbedApp:
     def jump_to(self):
         print("Jumping to Job Nmber...")                                                                #-Needs Work
 
-    # Tab-specific example functions
+    # Tab-specific rcm
     def add_research_entry(self):
         print("Adding research entry...")                                                               #-Needs Work
 

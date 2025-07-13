@@ -1,12 +1,11 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 from PIL.Image import Resampling
 import os
 import fitz  # PyMuPDF
 
-# Change this path to your own static directory
-STATIC_DIR = "/Users/sjohnstone/Python/RESEARCHV2/RENAME"
+DIR = "/Users/sjohnstone/Python/RESEARCHV2/RENAME"
 
 class FileViewerApp:
     def __init__(self, root):
@@ -36,21 +35,24 @@ class FileViewerApp:
         self.min_scale = 0.1
         self.max_scale = 5.0
         self.img = None
-        self.tk_img = None  # To prevent garbage collection
+        self.tk_img = None
         self.files = []
+        self.pan_start = None
 
         self.sidebar.bind("<<ListboxSelect>>", self.on_file_select)
         self.canvas.bind("<ButtonPress-1>", self.start_pan)
         self.canvas.bind("<B1-Motion>", self.do_pan)
-        self.canvas.bind("<MouseWheel>", self.zoom)
+
+        # Zoom bindings for different platforms
+        self.canvas.bind("<MouseWheel>", self.zoom)         # Windows/macOS
+        self.canvas.bind("<Button-4>", self.zoom)           # Linux scroll up
+        self.canvas.bind("<Button-5>", self.zoom)           # Linux scroll down
 
         self.load_files()
-        self.pan_start = None
 
     def load_files(self):
         extensions = ('.png', '.jpg', '.jpeg', '.tiff', '.pdf')
-        self.files = [f for f in os.listdir(STATIC_DIR)
-                      if f.lower().endswith(extensions)]
+        self.files = [f for f in os.listdir(DIR) if f.lower().endswith(extensions)]
         self.sidebar.delete(0, tk.END)
         for file in self.files:
             self.sidebar.insert("end", file)
@@ -60,24 +62,20 @@ class FileViewerApp:
         if not selection:
             return
         filename = self.files[selection[0]]
-        path = os.path.join(STATIC_DIR, filename)
+        path = os.path.join(DIR, filename)
         self.display_file(path)
 
     def display_file(self, path):
         try:
             if path.lower().endswith('.pdf'):
                 doc = fitz.open(path)
-                page = doc.load_page(0)  # Correct way to access the first page
-                try:
-                    pix = page.get_pixmap()  # Extract image
-                except AttributeError as e:
-                    print(f"Error getting pixmap: {e}")
-                    return
+                page = doc.load_page(0)
+                pix = page.get_pixmap()
                 img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
             else:
                 img = Image.open(path).convert("RGBA")
         except Exception as e:
-            print(f"Error loading file: {e}")
+            messagebox.showerror("File Load Error", f"Could not load file:\n{e}")
             return
 
         self.img = img
@@ -91,11 +89,12 @@ class FileViewerApp:
             try:
                 img_scaled = self.img.resize((width, height), Resampling.LANCZOS)
                 self.tk_img = ImageTk.PhotoImage(img_scaled)
+
                 self.canvas.delete("all")
                 self.image_id = self.canvas.create_image(0, 0, image=self.tk_img, anchor="nw")
                 self.canvas.config(scrollregion=self.canvas.bbox("all"))
             except Exception as e:
-                print(f"Render error: {e}")
+                messagebox.showerror("Render Error", f"Could not render image:\n{e}")
 
     def start_pan(self, event):
         self.canvas.scan_mark(event.x, event.y)
@@ -104,11 +103,34 @@ class FileViewerApp:
         self.canvas.scan_dragto(event.x, event.y, gain=1)
 
     def zoom(self, event):
-        factor = 1.1 if event.delta > 0 else 0.9
+        # Determine zoom factor and location
+        if hasattr(event, 'delta'):
+            factor = 1.1 if event.delta > 0 else 0.9
+        elif event.num == 4:
+            factor = 1.1
+        elif event.num == 5:
+            factor = 0.9
+        else:
+            return
+
         new_scale = self.scale * factor
-        if self.min_scale <= new_scale <= self.max_scale:
-            self.scale = new_scale
-            self.render_image()
+        if not (self.min_scale <= new_scale <= self.max_scale):
+            return
+
+        # Coordinates before zoom
+        canvas_x = self.canvas.canvasx(event.x)
+        canvas_y = self.canvas.canvasy(event.y)
+        rel_x = canvas_x / (self.img.width * self.scale)
+        rel_y = canvas_y / (self.img.height * self.scale)
+
+        self.scale = new_scale
+        self.render_image()
+
+        # Coordinates after zoom, center view
+        new_canvas_x = self.img.width * self.scale * rel_x
+        new_canvas_y = self.img.height * self.scale * rel_y
+        self.canvas.xview_moveto((new_canvas_x - event.x) / (self.canvas.bbox("all")[2]))
+        self.canvas.yview_moveto((new_canvas_y - event.y) / (self.canvas.bbox("all")[3]))
 
 if __name__ == "__main__":
     root = tk.Tk()

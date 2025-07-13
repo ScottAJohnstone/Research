@@ -2,6 +2,7 @@ import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
+from tkcalendar import DateEntry
 from tkinter.simpledialog import askstring
 import os
 from datetime import datetime, timedelta
@@ -19,13 +20,14 @@ class BulkRenamer:
         self.prefix = tk.StringVar(value=f'{jobnum}_')                    
         self.suffix = tk.StringVar(value="")
         self.custom_attributes = tk.BooleanVar(value=False)
+        self.use_date_folder = tk.BooleanVar(value=False)
+        self.selected_date = datetime.now().date()
 
         self.default_folder = os.path.expanduser('~') + '/Downloads'
         self.files = []
         self.selected_files = []
 
         self.setup_ui()
-        #self.load_recent_files()
 
     def setup_ui(self):
         button_frame = tk.Frame(self.root)
@@ -59,51 +61,61 @@ class BulkRenamer:
 
         if file_paths:
             self.selected_files = [(file_path, os.path.basename(file_path)) for file_path in file_paths]
-            self.files = []
+            self.files = [] 
             self.apply_rename_logic()
             self.populate_treeview()
 
     def open_configure_window(self):
-        if hasattr(self, "configure_window") and self.configure_window.winfo_exists():
-            self.configure_window.lift()
-            return
+            if hasattr(self, "configure_window") and self.configure_window.winfo_exists():
+                self.configure_window.lift()
+                return
 
-        self.configure_window = tk.Toplevel(self.root)
-        self.configure_window.title("Configure Default Settings")
-        self.configure_window.geometry("590x180")
-        config_frame = tk.Frame(self.configure_window)
-        config_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+            self.configure_window = tk.Toplevel(self.root)
+            self.configure_window.transient(self.root)
+            self.configure_window.title("Configure Default Settings")
+            self.configure_window.geometry("590x260")
+            config_frame = tk.Frame(self.configure_window)
+            config_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-        path_label = tk.Label(config_frame, text="Default Folder Path:")
-        path_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+            path_label = tk.Label(config_frame, text="Default Folder Path:")
+            path_label.grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
 
-        self.path_entry = tk.Entry(config_frame, width=30)
-        self.path_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.path_entry.insert(0, self.default_folder if self.default_folder else "")
+            self.path_entry = tk.Entry(config_frame, width=30)
+            self.path_entry.grid(row=0, column=1, padx=5, pady=5)
+            self.path_entry.insert(0, self.default_folder if self.default_folder else "")
 
-        browse_button = tk.Button(config_frame, text="Browse Folders", command=self.browse_folder)
-        browse_button.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+            browse_button = tk.Button(config_frame, text="Browse Folders", command=self.browse_folder)
+            browse_button.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
 
-        self.prefix_label = tk.Label(config_frame, text="Default Prefix:")
-        self.prefix_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+            self.prefix_label = tk.Label(config_frame, text="Default Prefix:")
+            self.prefix_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+            self.prefix_entry = tk.Entry(config_frame, textvariable=self.prefix, width=30)
+            self.prefix_entry.grid(row=1, column=1, padx=5, pady=5)
+            self.apply_button = tk.Button(config_frame, text="Apply Changes", command=self.apply_changes)
+            self.apply_button.grid(row=1, column=2, padx=5, pady=5, sticky=tk.W, ipadx=1)
 
-        self.prefix_entry = tk.Entry(config_frame, textvariable=self.prefix, width=30)
-        self.prefix_entry.grid(row=1, column=1, padx=5, pady=5)
+            self.suffix_label = tk.Label(config_frame, text="Default Suffix:")
+            self.suffix_label.grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+            self.suffix_entry = tk.Entry(config_frame, textvariable=self.suffix, width=30)
+            self.suffix_entry.grid(row=2, column=1, padx=5, pady=5)
+            self.cancel_button = tk.Button(config_frame, text="Cancel", command=self.configure_window.destroy)
+            self.cancel_button.grid(row=2, column=2, padx=5, pady=5, ipadx=26, sticky=tk.W)
 
-        self.apply_button = tk.Button(config_frame, text="Apply Changes", command=self.apply_changes)
-        self.apply_button.grid(row=1, column=2, padx=5, pady=5, sticky=tk.W, ipadx=1)
+            self.custom_attributes_checkbox = tk.Checkbutton(config_frame, text="Enable Custom Prefix/Suffix", variable=self.custom_attributes)
+            self.custom_attributes_checkbox.grid(row=3, columnspan=3, padx=5, pady=5, sticky=tk.W)
 
-        self.suffix_label = tk.Label(config_frame, text="Default Suffix:")
-        self.suffix_label.grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+            self.date_folder_checkbox = tk.Checkbutton(config_frame, text="Create Folder Named by Date", variable=self.use_date_folder)
+            self.date_folder_checkbox.grid(row=4, columnspan=3, padx=5, pady=5, sticky=tk.W)
+            
 
-        self.suffix_entry = tk.Entry(config_frame, textvariable=self.suffix, width=30)
-        self.suffix_entry.grid(row=2, column=1, padx=5, pady=5)
 
-        self.cancel_button = tk.Button(config_frame, text="Cancel", command=self.configure_window.destroy)
-        self.cancel_button.grid(row=2, column=2, padx=5, pady=5, ipadx=26, sticky=tk.W)
+            #! this is. broken
+            self.date_label = tk.Label(config_frame, text="Select Date:")
+            self.date_label.grid(row=5, column=0, sticky=tk.W, padx=5, pady=5)
+            self.date_entry = DateEntry(config_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
+            self.date_entry.set_date(self.selected_date)
+            self.date_entry.grid(row=5, column=1, padx=5, pady=5)
 
-        self.custom_attributes_checkbox = tk.Checkbutton(config_frame, text="Enable Custom Prefix/Suffix", variable=self.custom_attributes)
-        self.custom_attributes_checkbox.grid(row=3, columnspan=3, padx=5, pady=5, sticky=tk.W)
 
     def browse_folder(self):
         folder_path = filedialog.askdirectory(title="Select Folder")
@@ -113,12 +125,21 @@ class BulkRenamer:
             self.default_folder = folder_path
             self.load_recent_files()
 
+
     def apply_changes(self):
         folder_path = self.path_entry.get()
         if not folder_path:
             messagebox.showwarning("No Folder", "Please select a folder.")
             return
         self.default_folder = folder_path
+
+        if self.use_date_folder.get():
+            selected_date = self.date_entry.get_date()
+            date_folder_name = selected_date.strftime("%Y-%m-%d")
+            dated_folder_path = os.path.join(self.default_folder, date_folder_name)
+            os.makedirs(dated_folder_path, exist_ok=True)
+            self.default_folder = dated_folder_path
+
         if self.custom_attributes.get():
             self.apply_prefix_suffix()
         else:
@@ -126,6 +147,7 @@ class BulkRenamer:
         self.populate_treeview()
         if hasattr(self, "configure_window") and self.configure_window.winfo_exists():
             self.configure_window.destroy()
+
 
     def apply_prefix_suffix(self):
         all_files = self.selected_files + self.files
@@ -319,3 +341,5 @@ def main(parent=None):
 
 if __name__ == "__main__":
     main()
+
+
