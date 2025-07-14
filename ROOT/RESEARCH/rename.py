@@ -23,7 +23,7 @@ class BulkRenamer:
         self.use_date_folder = tk.BooleanVar(value=False)
         self.selected_date = datetime.now().date()
 
-        self.default_folder = os.path.expanduser('~') + '/Downloads'
+        self.default_folder = os.path.join(os.path.expanduser('~'), 'Downloads')
         self.files = []
         self.selected_files = []
 
@@ -73,7 +73,7 @@ class BulkRenamer:
             self.configure_window = tk.Toplevel(self.root)
             self.configure_window.transient(self.root)
             self.configure_window.title("Configure Default Settings")
-            self.configure_window.geometry("590x260")
+            self.configure_window.geometry("665x185")
             config_frame = tk.Frame(self.configure_window)
             config_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
@@ -102,19 +102,16 @@ class BulkRenamer:
             self.cancel_button.grid(row=2, column=2, padx=5, pady=5, ipadx=26, sticky=tk.W)
 
             self.custom_attributes_checkbox = tk.Checkbutton(config_frame, text="Enable Custom Prefix/Suffix", variable=self.custom_attributes)
-            self.custom_attributes_checkbox.grid(row=3, columnspan=3, padx=5, pady=5, sticky=tk.W)
+            self.custom_attributes_checkbox.grid(row=3, columnspan=1, padx=(0,15), pady=5, sticky=tk.W)
 
             self.date_folder_checkbox = tk.Checkbutton(config_frame, text="Create Folder Named by Date", variable=self.use_date_folder)
-            self.date_folder_checkbox.grid(row=4, columnspan=3, padx=5, pady=5, sticky=tk.W)
+            self.date_folder_checkbox.grid(row=3,column=1, columnspan=1, pady=5, sticky=tk.W)
             
-
-
-            #! this is. broken
-            self.date_label = tk.Label(config_frame, text="Select Date:")
-            self.date_label.grid(row=5, column=0, sticky=tk.W, padx=5, pady=5)
+            #self.date_label = tk.Label(config_frame, text="Select Date:")                                                            #! this is. broken Loses focus no matter what 
+            #self.date_label.grid(row=3, column=3, sticky=tk.W, padx=5, pady=5)
             self.date_entry = DateEntry(config_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
             self.date_entry.set_date(self.selected_date)
-            self.date_entry.grid(row=5, column=1, padx=5, pady=5)
+            self.date_entry.grid(row=3, column=2, padx=5, pady=5)
 
 
     def browse_folder(self):
@@ -246,6 +243,10 @@ class BulkRenamer:
         self.execute_button.config(state=tk.NORMAL)
 
     def execute_rename(self):
+        target_folder = None
+        if self.use_date_folder.get():
+            target_folder = self.default_folder
+
         for item in self.treeview.get_children():
             original_name, proposed_name = self.treeview.item(item, "values")
 
@@ -253,23 +254,33 @@ class BulkRenamer:
             match = next(
                 (fp for fp, _ in self.selected_files + self.files if os.path.basename(fp) == original_name),
                 None
-                        )
+            )
 
             if not match:
                 messagebox.showerror("Error", f"Original file path for {original_name} not found.")
                 continue
 
             original_path = match
-            proposed_path = os.path.join(os.path.dirname(original_path), proposed_name)
 
-            if original_path != proposed_path:
-                try:
-                    os.rename(original_path, proposed_path)
-                except Exception as e:
-                    messagebox.showerror("Error", f"Failed to rename {original_name}: {e}")
-                    return
+            # If using date folder, put in that folder
+            if target_folder:
+                proposed_path = os.path.join(target_folder, proposed_name)
+            else:
+                proposed_path = os.path.join(os.path.dirname(original_path), proposed_name)
+
+            # Avoid overwriting
+            if os.path.exists(proposed_path):
+                messagebox.showerror("Error", f"File {proposed_name} already exists.")
+                continue
+
+            try:
+                os.rename(original_path, proposed_path)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to rename {original_name}: {e}")
+                return
 
         messagebox.showinfo("Success", "Files renamed successfully.")
+
 
         
     def on_proposed_name_click(self, event):                                #- NEED TO FIX FAST CLICK ISSUES
