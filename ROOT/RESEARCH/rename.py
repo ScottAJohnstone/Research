@@ -207,7 +207,7 @@ class BulkRenamer:
             # Default to keeping the original name unless we match a pattern
             proposed_name = name + ext
 
-            # Case 1: Entire name is just digits
+            # Case 1: Entire name is just digits e.g. "1234"
             if name.isdigit():
                 proposed_name = f"Map #{name}" + ext
 
@@ -223,7 +223,13 @@ class BulkRenamer:
                 parts = name.split('-')
                 if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
                     proposed_name = f"Vol.{parts[0]} - Pg.{parts[1]}" + ext
-                else:
+                # elif len(parts) == 2 and not parts[0].isdigit() and parts[1].isdigit():
+                #     numbers = [n for n in parts[0] if n.isalpha()]
+                #     proposed_name = f"Vol.{parts[0]} - Pg.{parts[1]}" + ext                                               #!working here
+                #     print("letters in first")
+                # elif len(parts) == 2 and not parts[0].isdigit() and parts[1].isdigit():
+                #     print("letters in second")
+                # else:
                     proposed_name = name + ext  # fallback for non-matching dash cases
 
             # Store the renamed file in the appropriate list
