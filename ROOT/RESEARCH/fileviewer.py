@@ -20,14 +20,17 @@ from PIL import Image, ImageTk
 from PIL.Image import Resampling
 
 """
-T1.py — Image/PDF/Text File Viewer (Enhanced)
+T1.py — Image/PDF/Text File Viewer (stable)
 
-- No f-strings: all dynamic strings use concatenation or str.format to avoid parser issues
-- Sidebar file list, toolbar (Open Folder, Add Files, Remove, Prev/Next, Fit, Zoom +, Zoom −, Shortcuts)
-- Multi-page docs (PDF, multi-frame TIFF): pager below preview (bottom-left) with page jump
+- No f-strings (uses concatenation) to avoid parser issues seen before
+- Zoom logic fixed and consistent with Fit-to-Window behavior
+- Sessions are MANUAL ONLY (Save/Load via menu). Config (preferences/presets) persists.
+- Presets menu implemented (Save/Load presets of current file list)
+- Preferences dialog implemented (default open dir, default session file)
+- Multi-page pager with direct page jump (PDF & multi-frame TIFF)
 - Text viewer for .txt/.md/.csv/.log/.res
-- Session persistence: remembers file list, current file, and page index
-- Starts at Fit to Window; Zoom +/−; shortcuts dialog (F1)
+- Neutral system theme; resizable, compact layout
+- **Pan with mouse drag** on the image preview (restored)
 """
 
 try:
@@ -57,7 +60,7 @@ def _system_open(path: str):
         else:
             subprocess.Popen(["xdg-open", path])
     except Exception as e:
-        messagebox.showerror("Open externally", "Could not open with system app:"+ str(e))
+        messagebox.showerror("Open Externally", "Could not open with system app:" + str(e))
 
 
 def _reveal_in_file_manager(path: str):
@@ -70,30 +73,41 @@ def _reveal_in_file_manager(path: str):
             folder = os.path.dirname(path)
             subprocess.Popen(["xdg-open", folder])
     except Exception as e:
-        messagebox.showerror("Show in folder", "Could not reveal file:" + str(e))
+        messagebox.showerror("Show in Folder", "Could not reveal file:" + str(e))
 
 
 # ---------- app ----------
 class FileViewerApp:
     def __init__(self, root, start_dir: str | None = None):
         self.root = root
-        self.root.title("Multi-file Viewer")
+        self.root.title("File Viewer")
         self.root.geometry("1200x800")
+        self.root.minsize(900, 600)
+
+        # ttk padding tweaks (keep system colors)
+        try:
+            style = ttk.Style()
+            style.configure("TButton", padding=(6, 4))
+            style.configure("TLabel", padding=(2, 2))
+            style.configure("TEntry", padding=(2, 2))
+        except Exception:
+            pass
 
         # state
         self.current_dir = start_dir
-        self.files = []  # type: list[str]
-        self.current_index = None  # type: int | None
-        self.current_path = None   # type: str | None
-        self.mode = None           # type: str | None  # 'image' or 'text'
+        self.files = []                # type: list[str]
+        self.current_index = None      # type: int | None
+        self.current_path = None       # type: str | None
+        self.mode = None               # 'image' or 'text'
 
         # image/pdf render state
-        self.base_image = None     # type: Image.Image | None
-        self.tk_image = None       # type: ImageTk.PhotoImage | None
-        self.scale = 1.0
+        self.base_image = None         # type: Image.Image | None
+        self.tk_image = None           # type: ImageTk.PhotoImage | None
+        self.scale = 1.0               # current scale applied to base_image
         self.min_scale = 0.1
         self.max_scale = 8.0
-        self.auto_fit = True
+        self.auto_fit = True           # if True, resize triggers re-fit
+        self._center_next_render = True  # center view on next render
 
         # multi-page
         self.pdf_doc = None
@@ -101,13 +115,22 @@ class FileViewerApp:
         self.doc_page_index = 0
         self.doc_page_count = 1
 
+        # config (preferences + presets)
+        self.config = {
+            "default_open_dir": None,          # str | None
+            "default_session_path": None,      # str | None
+            "presets": {}                      # name -> list[str]
+        }
+
         # ui
         self._build_menu()
         self._build_layout()
         self._bind_events()
 
-        # session
-        self._load_session()
+        # load config only (sessions are manual)
+        self._load_config()
+        if self.current_dir is None and self.config.get("default_open_dir"):
+            self.current_dir = self.config.get("default_open_dir")
         if self.current_dir and os.path.isdir(self.current_dir) and not self.files:
             self.load_directory(self.current_dir)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -121,8 +144,10 @@ class FileViewerApp:
         file_menu.add_command(label="Add Files…", command=self.add_files, accelerator="Ctrl+Shift+O")
         file_menu.add_command(label="Remove Selected", command=self.remove_selected, accelerator="Del")
         file_menu.add_separator()
-        file_menu.add_command(label="Save Session", command=self._save_session, accelerator="Ctrl+S")
-        file_menu.add_command(label="Clear Session", command=self._clear_session)
+        file_menu.add_command(label="Save Session", command=self.save_session, accelerator="Ctrl+S")
+        file_menu.add_command(label="Save Session As…", command=self.save_session_as)
+        file_menu.add_command(label="Load Session…", command=self.load_session_from_file)
+        file_menu.add_command(label="Clear Session", command=self.clear_session_ui)
         file_menu.add_separator()
         file_menu.add_command(label="Quit", command=self.root.quit, accelerator="Ctrl+Q")
         menubar.add_cascade(label="File", menu=file_menu)
@@ -132,6 +157,15 @@ class FileViewerApp:
         view_menu.add_command(label="Zoom In", command=lambda: self._zoom(1.1), accelerator="+")
         view_menu.add_command(label="Zoom Out", command=lambda: self._zoom(1/1.1), accelerator="-")
         menubar.add_cascade(label="View", menu=view_menu)
+
+        presets_menu = tk.Menu(menubar, tearoff=False)
+        presets_menu.add_command(label="Save Current as Preset…", command=self.save_preset)
+        presets_menu.add_command(label="Load Preset…", command=self.load_preset)
+        menubar.add_cascade(label="Presets", menu=presets_menu)
+
+        config_menu = tk.Menu(menubar, tearoff=False)
+        config_menu.add_command(label="Preferences…", command=self.show_preferences)
+        menubar.add_cascade(label="Config", menu=config_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False)
         help_menu.add_command(label="Keyboard Shortcuts", command=self.show_shortcuts, accelerator="F1")
@@ -144,25 +178,25 @@ class FileViewerApp:
         self.root.columnconfigure(1, weight=1)
 
         # toolbar
-        tb = ttk.Frame(self.root, padding=(8, 6))
+        tb = ttk.Frame(self.root, padding=(6, 4))
         tb.grid(row=0, column=0, columnspan=2, sticky="ew")
 
         def B(text, cmd):
             b = ttk.Button(tb, text=text, command=cmd)
-            b.pack(side=tk.LEFT, padx=4)
+            b.pack(side=tk.LEFT, padx=3)
             return b
 
         B("Open Folder", self.open_folder)
         B("Add Files", self.add_files)
         B("Remove", self.remove_selected)
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        B("Prev ←", self.prev_file)
-        B("Next →", self.next_file)
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        B("Previous", self.prev_file)
+        B("Next", self.next_file)
+        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
         B("Fit", self.fit_to_window)
-        B("Zoom +", lambda: self._zoom(1.1))
-        B("Zoom -", lambda: self._zoom(1/1.1))
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        B("Zoom In", lambda: self._zoom(1.1))
+        B("Zoom Out", lambda: self._zoom(1/1.1))
+        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
         B("Shortcuts", self.show_shortcuts)
 
         # sidebar
@@ -170,8 +204,8 @@ class FileViewerApp:
         sidebar.grid(row=1, column=0, sticky="nsw")
         sidebar.rowconfigure(1, weight=1)
         sidebar.columnconfigure(0, weight=1)
-        ttk.Label(sidebar, text="Files", padding=(8, 6)).grid(row=0, column=0, sticky="w")
-        self.listbox = tk.Listbox(sidebar, width=42, activestyle="dotbox")
+        ttk.Label(sidebar, text="Files").grid(row=0, column=0, sticky="w", padx=8, pady=(6, 2))
+        self.listbox = tk.Listbox(sidebar, width=40, activestyle="dotbox")
         self.listbox.grid(row=1, column=0, sticky="nsew")
         sb = ttk.Scrollbar(sidebar, orient="vertical", command=self.listbox.yview)
         sb.grid(row=1, column=1, sticky="ns")
@@ -209,12 +243,12 @@ class FileViewerApp:
         # pager bar (bottom-left)
         self.page_bar = ttk.Frame(self.main_frame, padding=(8, 6))
         self.page_bar.grid(row=1, column=0, sticky="w")
-        self.page_prev_btn = ttk.Button(self.page_bar, text="◀ Prev", command=self.page_prev, width=8)
+        self.page_prev_btn = ttk.Button(self.page_bar, text="◀ Previous", command=self.page_prev, width=10)
         self.page_entry_var = tk.StringVar(value="1")
         self.page_entry = ttk.Entry(self.page_bar, width=6, textvariable=self.page_entry_var)
-        self.page_go_btn = ttk.Button(self.page_bar, text="Go", command=self.page_go)
+        self.page_go_btn = ttk.Button(self.page_bar, text="Go", command=self.page_go, width=4)
         self.page_label = ttk.Label(self.page_bar, text="/ 1")
-        self.page_next_btn = ttk.Button(self.page_bar, text="Next ▶", command=self.page_next, width=8)
+        self.page_next_btn = ttk.Button(self.page_bar, text="Next ▶", command=self.page_next, width=10)
         self.page_prev_btn.pack(side=tk.LEFT)
         ttk.Label(self.page_bar, text=" Page ").pack(side=tk.LEFT)
         self.page_entry.pack(side=tk.LEFT)
@@ -232,7 +266,7 @@ class FileViewerApp:
         self.root.bind_all("<Control-o>", lambda e: self.open_folder())
         self.root.bind_all("<Control-Shift-o>", lambda e: self.add_files())
         self.root.bind_all("<Delete>", lambda e: self.remove_selected())
-        self.root.bind_all("<Control-s>", lambda e: self._save_session())
+        self.root.bind_all("<Control-s>", lambda e: self.save_session())
         self.root.bind_all("<Left>", lambda e: self.prev_file())
         self.root.bind_all("<Right>", lambda e: self.next_file())
         self.root.bind_all("<Key-plus>", lambda e: self._zoom(1.1))
@@ -255,11 +289,13 @@ class FileViewerApp:
         self.listbox.bind("<Button-3>", self._show_ctx)
         self.listbox.bind("<Control-Button-1>", self._show_ctx)
 
-        # canvas
+        # canvas: zoom + PAN
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<MouseWheel>", self._on_wheel)      # Win/mac
         self.canvas.bind("<Button-4>", self._on_wheel_linux)  # Linux up
         self.canvas.bind("<Button-5>", self._on_wheel_linux)  # Linux down
+        self.canvas.bind("<ButtonPress-1>", self._start_pan)
+        self.canvas.bind("<B1-Motion>", self._do_pan)
 
         # pager
         self.page_entry.bind("<Return>", lambda e: self.page_go())
@@ -284,13 +320,15 @@ class FileViewerApp:
 
     # ----- open / list ops -----
     def open_folder(self, initial_dir: str | None = None):
-        dirpath = filedialog.askdirectory(initialdir=initial_dir or os.getcwd(), title="Select folder to view")
+        start_dir = initial_dir or self.config.get("default_open_dir") or os.getcwd()
+        dirpath = filedialog.askdirectory(initialdir=start_dir, title="Select folder to view")
         if not dirpath:
             return
         self.load_directory(dirpath)
 
     def add_files(self):
-        paths = filedialog.askopenfilenames(title="Add files to view", filetypes=[
+        start_dir = self.config.get("default_open_dir") or os.getcwd()
+        paths = filedialog.askopenfilenames(title="Add files to view", initialdir=start_dir, filetypes=[
             ("Supported", " ".join("*" + ext for ext in SUPPORTED_EXTS)),
             ("Text files", " ".join("*" + ext for ext in TEXT_EXTS)),
             ("All files", "*.*"),
@@ -305,8 +343,6 @@ class FileViewerApp:
                 added += 1
         if added and self.current_index is None:
             self._open_index(0)
-        if added:
-            self._save_session()
 
     def remove_selected(self):
         sel = self.listbox.curselection()
@@ -327,7 +363,6 @@ class FileViewerApp:
                 self.current_path = None
                 self._clear_canvas()
                 self._update_status()
-        self._save_session()
 
     def load_directory(self, dirpath: str):
         self.current_dir = dirpath
@@ -353,7 +388,6 @@ class FileViewerApp:
         else:
             self._clear_canvas()
             self._update_status()
-        self._save_session()
 
     def _on_select(self, _event=None):
         sel = self.listbox.curselection()
@@ -402,9 +436,11 @@ class FileViewerApp:
     # ----- open path -----
     def open_path(self, path: str):
         self.current_path = path
+        self.base_image = None
+        self.tk_image = None
         self.scale = 1.0
         self.auto_fit = True
-        self.base_image = None
+        self._center_next_render = True
         self.pdf_doc = None
         self.pdf_page_index = 0
         self.doc_page_index = 0
@@ -435,7 +471,6 @@ class FileViewerApp:
                 self.mode = 'image'
                 self._show_canvas_viewer()
                 self._set_page_nav_visible(self.doc_page_count > 1)
-                self._render_to_canvas()
             elif _is_text(path):
                 self.mode = 'text'
                 self._show_text_viewer()
@@ -449,9 +484,8 @@ class FileViewerApp:
                 self.mode = 'image'
                 self._show_canvas_viewer()
                 self._set_page_nav_visible(False)
-                self._render_to_canvas()
         except Exception as e:
-            messagebox.showerror("Open error", "Could not open " + os.path.basename(path) + "" + str(e))
+            messagebox.showerror("Open Error", "Could not open " + os.path.basename(path) + "" + str(e))
             self._clear_canvas()
             self._update_status()
             return
@@ -460,7 +494,6 @@ class FileViewerApp:
             self.fit_to_window()
         self._update_status()
         self._update_page_nav()
-        self._save_session()
 
     # ----- text loader -----
     def _load_text_file(self, path: str):
@@ -468,7 +501,7 @@ class FileViewerApp:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
         except Exception as e:
-            messagebox.showerror("Open error", "Could not read text file:" + str(e))
+            messagebox.showerror("Open Error", "Could not read text file:" + str(e))
             content = ""
         self.text_widget.configure(state="normal")
         self.text_widget.delete("1.0", tk.END)
@@ -485,43 +518,73 @@ class FileViewerApp:
         pix = page.get_pixmap(matrix=mat, alpha=False)
         mode = "RGB" if pix.alpha == 0 else "RGBA"
         self.base_image = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
-        self._render_to_canvas()
 
-    # ----- canvas render & zoom -----
-    def _render_to_canvas(self):
+    # ----- scale helpers -----
+    def _fit_scale(self) -> float:
         if not self.base_image:
-            return
+            return 1.0
         cv_w = max(1, self.canvas.winfo_width())
         cv_h = max(1, self.canvas.winfo_height())
         img_w, img_h = self.base_image.size
-        # compute scale to fit viewport
-        scale = min(float(cv_w) / float(img_w), float(cv_h) / float(img_h))
-        scaled = self.base_image.resize((max(1, int(img_w * scale)), max(1, int(img_h * scale))), Resampling.LANCZOS)
+        return min(float(cv_w) / float(img_w), float(cv_h) / float(img_h))
+
+    # ----- canvas render & zoom & pan -----
+    def _render_to_canvas(self):
+        if not self.base_image:
+            return
+        img = self.base_image
+        w = max(1, int(img.width * self.scale))
+        h = max(1, int(img.height * self.scale))
+        scaled = img.resize((w, h), Resampling.LANCZOS)
         self.tk_image = ImageTk.PhotoImage(scaled)
+
         self.canvas.delete("all")
-        x = (cv_w - scaled.width) // 2
-        y = (cv_h - scaled.height) // 2
-        self.image_id = self.canvas.create_image(x, y, anchor="nw", image=self.tk_image)
+        # place at (0,0) and use scrollregion; center via xview/yview when needed
+        self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
+        self.canvas.config(scrollregion=(0, 0, scaled.width, scaled.height))
+
+        if self._center_next_render:
+            cv_w = max(1, self.canvas.winfo_width())
+            cv_h = max(1, self.canvas.winfo_height())
+            x0 = max(0, (scaled.width - cv_w) / 2.0)
+            y0 = max(0, (scaled.height - cv_h) / 2.0)
+            if scaled.width > 0:
+                self.canvas.xview_moveto(x0 / float(scaled.width))
+            if scaled.height > 0:
+                self.canvas.yview_moveto(y0 / float(scaled.height))
+            self._center_next_render = False
 
     def _on_canvas_resize(self, _event):
-        if self.mode == 'image' and self.base_image is not None:
-            self._render_to_canvas()
+        if self.mode != 'image' or not self.base_image:
+            return
+        if self.auto_fit:
+            self.scale = self._fit_scale()
+            self._center_next_render = True
+        self._render_to_canvas()
+        self._update_status()
 
     def _zoom(self, factor: float):
         if self.mode != 'image' or not self.base_image:
             return
-        cv_w = max(1, self.canvas.winfo_width())
-        cv_h = max(1, self.canvas.winfo_height())
-        img_w, img_h = self.base_image.size
-        current_fit = min(float(cv_w) / float(img_w), float(cv_h) / float(img_h))
-        new_scale = max(self.min_scale, min(self.max_scale, current_fit * factor))
-        scaled = self.base_image.resize((max(1, int(img_w * new_scale)), max(1, int(img_h * new_scale))), Resampling.LANCZOS)
-        self.tk_image = ImageTk.PhotoImage(scaled)
-        self.canvas.delete("all")
-        self.image_id = self.canvas.create_image((cv_w - scaled.width) // 2, (cv_h - scaled.height) // 2, image=self.tk_image, anchor="nw")
-        self.auto_fit = False
+        new_scale = max(self.min_scale, min(self.max_scale, self.scale * factor))
+        if abs(new_scale - self.scale) < 1e-4:
+            return
         self.scale = new_scale
+        self.auto_fit = False
+        self._center_next_render = False  # preserve current view on zoom
+        self._render_to_canvas()
         self._update_status()
+
+    # --- panning ---
+    def _start_pan(self, event):
+        if self.mode != 'image' or not self.base_image:
+            return
+        self.canvas.scan_mark(event.x, event.y)
+
+    def _do_pan(self, event):
+        if self.mode != 'image' or not self.base_image:
+            return
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
 
     def _on_wheel(self, event):
         if self.mode != 'image' or not self.base_image:
@@ -539,13 +602,15 @@ class FileViewerApp:
     def fit_to_window(self):
         if self.mode != 'image' or not self.base_image:
             return
+        self.scale = self._fit_scale()
         self.auto_fit = True
-        self.scale = 1.0
+        self._center_next_render = True
         self._render_to_canvas()
         self._update_status()
 
     def _clear_canvas(self):
         self.canvas.delete("all")
+        self.canvas.config(scrollregion=(0, 0, 0, 0))
 
     # ----- pager -----
     def _update_page_nav(self):
@@ -572,9 +637,12 @@ class FileViewerApp:
                 self._render_pdf_page()
         else:
             self._goto_image_frame(self.doc_page_index - 1)
+        if self.auto_fit:
+            self.scale = self._fit_scale()
+            self._center_next_render = True
+        self._render_to_canvas()
         self._update_page_nav()
         self._update_status()
-        self._save_session()
 
     def page_next(self):
         if self.mode != 'image' or self.doc_page_count <= 1:
@@ -585,9 +653,12 @@ class FileViewerApp:
                 self._render_pdf_page()
         else:
             self._goto_image_frame(self.doc_page_index + 1)
+        if self.auto_fit:
+            self.scale = self._fit_scale()
+            self._center_next_render = True
+        self._render_to_canvas()
         self._update_page_nav()
         self._update_status()
-        self._save_session()
 
     def page_go(self):
         if self.mode != 'image' or self.doc_page_count <= 1:
@@ -603,9 +674,12 @@ class FileViewerApp:
             self._render_pdf_page()
         else:
             self._goto_image_frame(n - 1)
+        if self.auto_fit:
+            self.scale = self._fit_scale()
+            self._center_next_render = True
+        self._render_to_canvas()
         self._update_page_nav()
         self._update_status()
-        self._save_session()
 
     def _goto_image_frame(self, frame_index: int):
         if not self.current_path:
@@ -620,58 +694,91 @@ class FileViewerApp:
             self.base_image = img
             self.doc_page_index = frame_index
             self.doc_page_count = total
-            self._render_to_canvas()
         except Exception as e:
             messagebox.showerror("Page", "Could not change page:" + str(e))
 
-    # ----- session -----
+    # ----- session & config (manual sessions) -----
     def _state_path(self) -> str:
+        cfg_path = self.config.get("default_session_path")
+        if cfg_path:
+            return cfg_path
         return os.path.join(os.path.expanduser("~"), ".fileviewer_session.json")
 
-    def _save_session(self):
+    def _config_path(self) -> str:
+        return os.path.join(os.path.expanduser("~"), ".fileviewer_config.json")
+
+    def save_session(self):
+        path = self._state_path() if self.config.get("default_session_path") else None
+        if not path:
+            self.save_session_as()
+            return
+        self._write_session(path)
+
+    def save_session_as(self):
+        path = filedialog.asksaveasfilename(title="Save Session As…", defaultextension=".json", filetypes=[("JSON", "*.json")])
+        if not path:
+            return
+        self._write_session(path)
+
+    def _write_session(self, path: str):
         try:
             data = {
                 "files": self.files,
                 "current_index": self.current_index,
                 "current_path": self.current_path,
                 "page_index": self.pdf_page_index if self.pdf_doc else self.doc_page_index,
+                "current_dir": self.current_dir,
             }
-            with open(self._state_path(), "w", encoding="utf-8") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            messagebox.showerror("Save Session", "Could not save session:" + str(e))
 
-    def _load_session(self):
-        path = self._state_path()
-        if not os.path.exists(path):
+    def load_session_from_file(self):
+        path = filedialog.askopenfilename(title="Load Session…", filetypes=[("JSON", "*.json"), ("All files", "*.*")])
+        if not path:
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             files = [p for p in data.get("files", []) if os.path.exists(p) and (_is_supported(p) or _is_text(p))]
-            if not files:
-                return
             self.files = files
             self.listbox.delete(0, tk.END)
             for p in self.files:
                 self.listbox.insert(tk.END, os.path.basename(p))
+            self.current_dir = data.get("current_dir")
             idx = data.get("current_index")
             if idx is None or not (0 <= idx < len(self.files)):
-                idx = 0
-            self._open_index(idx)
-            # restore page if applicable
+                idx = 0 if self.files else None
+            if idx is not None:
+                self._open_index(idx)
             self.doc_page_index = int(data.get("page_index") or 0)
             if self.doc_page_count > 1:
                 self.page_entry_var.set(str(self.doc_page_index + 1))
                 self.page_go()
+        except Exception as e:
+            messagebox.showerror("Load Session", "Could not load session:" + str(e))
+
+    def _load_config(self):
+        path = self._config_path()
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                self.config.update(data)
         except Exception:
             pass
 
-    def _clear_session(self):
+    def _save_config(self):
         try:
-            os.remove(self._state_path())
+            with open(self._config_path(), "w", encoding="utf-8") as f:
+                json.dump(self.config, f, indent=2)
         except Exception:
             pass
+
+    def clear_session_ui(self):
         self.files.clear()
         self.listbox.delete(0, tk.END)
         self._clear_canvas()
@@ -680,8 +787,99 @@ class FileViewerApp:
         self._update_status()
 
     def _on_close(self):
-        self._save_session()
+        # No auto session save; config is still saved
+        self._save_config()
         self.root.destroy()
+
+    # ----- presets -----
+    def save_preset(self):
+        top = tk.Toplevel(self.root)
+        top.title("Save Preset")
+        ttk.Label(top, text="Preset name:").pack(padx=12, pady=(12, 6), anchor="w")
+        name_var = tk.StringVar()
+        e = ttk.Entry(top, textvariable=name_var, width=32)
+        e.pack(padx=12, pady=(0, 12), fill=tk.X)
+        e.focus_set()
+
+        def do_save():
+            name = name_var.get().strip()
+            if not name:
+                self.root.bell()
+                return
+            self.config.setdefault("presets", {})[name] = list(self.files)
+            self._save_config()
+            top.destroy()
+
+        ttk.Button(top, text="Save", command=do_save).pack(padx=12, pady=(0, 12))
+
+    def load_preset(self):
+        presets = self.config.get("presets") or {}
+        if not presets:
+            messagebox.showinfo("Presets", "No presets saved yet.")
+            return
+        top = tk.Toplevel(self.root)
+        top.title("Load Preset")
+        ttk.Label(top, text="Choose a preset:").pack(padx=12, pady=(12, 6), anchor="w")
+        lb = tk.Listbox(top, width=30, height=8)
+        for k in sorted(presets.keys()):
+            lb.insert(tk.END, k)
+        lb.pack(padx=12, pady=(0, 12), fill=tk.BOTH, expand=True)
+
+        def do_load():
+            sel = lb.curselection()
+            if not sel:
+                self.root.bell()
+                return
+            name = lb.get(sel[0])
+            files = [p for p in presets.get(name, []) if os.path.exists(p) and (_is_supported(p) or _is_text(p))]
+            self.files = files
+            self.listbox.delete(0, tk.END)
+            for p in self.files:
+                self.listbox.insert(tk.END, os.path.basename(p))
+            if self.files:
+                self._open_index(0)
+            else:
+                self._clear_canvas()
+                self._update_status()
+            top.destroy()
+
+        ttk.Button(top, text="Load", command=do_load).pack(padx=12, pady=(0, 12))
+
+    # ----- preferences -----
+    def show_preferences(self):
+        top = tk.Toplevel(self.root)
+        top.title("Preferences")
+        frm = ttk.Frame(top, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="Default open folder:").grid(row=0, column=0, sticky="w")
+        open_var = tk.StringVar(value=self.config.get("default_open_dir") or "")
+        open_entry = ttk.Entry(frm, textvariable=open_var, width=50)
+        open_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        def choose_open():
+            d = filedialog.askdirectory(title="Choose default open folder")
+            if d:
+                open_var.set(d)
+        ttk.Button(frm, text="Browse…", command=choose_open).grid(row=0, column=2, padx=(6, 0))
+
+        ttk.Label(frm, text="Default session file:").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        sess_var = tk.StringVar(value=self.config.get("default_session_path") or "")
+        sess_entry = ttk.Entry(frm, textvariable=sess_var, width=50)
+        sess_entry.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(8, 0))
+        def choose_sess():
+            p = filedialog.asksaveasfilename(title="Choose default session file", defaultextension=".json", filetypes=[("JSON", "*.json")])
+            if p:
+                sess_var.set(p)
+        ttk.Button(frm, text="Browse…", command=choose_sess).grid(row=1, column=2, padx=(6, 0), pady=(8, 0))
+
+        frm.columnconfigure(1, weight=1)
+
+        def do_save_prefs():
+            self.config["default_open_dir"] = open_var.get().strip() or None
+            self.config["default_session_path"] = sess_var.get().strip() or None
+            self._save_config()
+            top.destroy()
+        ttk.Button(frm, text="Save", command=do_save_prefs).grid(row=2, column=2, sticky="e", pady=(12, 0))
 
     # ----- shortcuts dialog -----
     def show_shortcuts(self):
@@ -714,7 +912,7 @@ def get_shortcuts_text() -> str:
         "F — Fit to window",
         "F1 — Keyboard Shortcuts",
     ]
-    return "".join(lines)
+    return "\n".join(lines)
 
 
 # ---------- main ----------
