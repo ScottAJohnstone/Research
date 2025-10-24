@@ -2,17 +2,14 @@
 . Research V2:	File Viewer 
 . Image/PDF/Text File Viewer
 . Runs fileviewer.py
-
-- Sidebar file list, toolbar buttons (Open Folder, Add Files, Open Externally, Show in Folder, Prev/Next, Fit, Zoom +, Zoom −, Shortcuts)
-- Multi-page docs (PDF, multi-frame TIFF): **pager below the preview, direct page jump entry
-- Keyboard shortcuts dialog (F1)
-
-#/                                                                                                               #/
-#/                                                                                                               #/
 """
+#/                                                                                                               #/
+#/                                                                                                               #/
+# T1.py
 import os
 import sys
 import json
+import re
 import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -22,15 +19,15 @@ from PIL.Image import Resampling
 """
 T1.py — Image/PDF/Text File Viewer (stable)
 
-- No f-strings (uses concatenation) to avoid parser issues seen before
-- Zoom logic fixed and consistent with Fit-to-Window behavior
-- Sessions are MANUAL ONLY (Save/Load via menu). Config (preferences/presets) persists.
-- Presets menu implemented (Save/Load presets of current file list)
-- Preferences dialog implemented (default open dir, default session file)
-- Multi-page pager with direct page jump (PDF & multi-frame TIFF)
-- Text viewer for .txt/.md/.csv/.log/.res
-- Neutral system theme; resizable, compact layout
-- **Pan with mouse drag** on the image preview (restored)
+- No f-strings (uses concatenation)
+- Zoom + pan, Fit-to-Window
+- Manual sessions (Save/Load); Config (preferences/presets) persists
+- Presets (save/load lists)
+- Preferences (default open dir, default session file)
+- Multi-page pager (PDF, multi-frame TIFF) + page jump
+- Text viewer (.txt/.md/.csv/.log/.res)
+- Bulk Rename (scan → blue preview, clear, apply) with conflict-safe writes
+- NEW: Inline manual rename on list (double-click, F2, context menu)
 """
 
 try:
@@ -60,7 +57,7 @@ def _system_open(path: str):
         else:
             subprocess.Popen(["xdg-open", path])
     except Exception as e:
-        messagebox.showerror("Open Externally", "Could not open with system app:" + str(e))
+        messagebox.showerror("Open Externally", "Could not open with system app:\n" + str(e))
 
 
 def _reveal_in_file_manager(path: str):
@@ -73,7 +70,7 @@ def _reveal_in_file_manager(path: str):
             folder = os.path.dirname(path)
             subprocess.Popen(["xdg-open", folder])
     except Exception as e:
-        messagebox.showerror("Show in Folder", "Could not reveal file:" + str(e))
+        messagebox.showerror("Show in Folder", "Could not reveal file:\n" + str(e))
 
 
 # ---------- app ----------
@@ -81,8 +78,8 @@ class FileViewerApp:
     def __init__(self, root, start_dir: str | None = None):
         self.root = root
         self.root.title("File Viewer")
-        self.root.geometry("1200x800")
-        self.root.minsize(900, 600)
+        self.root.geometry("1400x920")      # larger start size per request
+        self.root.minsize(1100, 700)
 
         # ttk padding tweaks (keep system colors)
         try:
@@ -103,11 +100,11 @@ class FileViewerApp:
         # image/pdf render state
         self.base_image = None         # type: Image.Image | None
         self.tk_image = None           # type: ImageTk.PhotoImage | None
-        self.scale = 1.0               # current scale applied to base_image
+        self.scale = 1.0
         self.min_scale = 0.1
         self.max_scale = 8.0
-        self.auto_fit = True           # if True, resize triggers re-fit
-        self._center_next_render = True  # center view on next render
+        self.auto_fit = True
+        self._center_next_render = True
 
         # multi-page
         self.pdf_doc = None
@@ -117,10 +114,17 @@ class FileViewerApp:
 
         # config (preferences + presets)
         self.config = {
-            "default_open_dir": None,          # str | None
-            "default_session_path": None,      # str | None
-            "presets": {}                      # name -> list[str]
+            "default_open_dir": None,
+            "default_session_path": None,
+            "presets": {}
         }
+
+        # rename preview state (bulk)
+        self.rename_preview = {}   # index -> new_basename (with ext preserved)
+
+        # inline rename editor (manual rename)
+        self._inline_editor = None
+        self._inline_editor_index = None
 
         # ui
         self._build_menu()
@@ -163,6 +167,12 @@ class FileViewerApp:
         presets_menu.add_command(label="Load Preset…", command=self.load_preset)
         menubar.add_cascade(label="Presets", menu=presets_menu)
 
+        tools_menu = tk.Menu(menubar, tearoff=False)
+        tools_menu.add_command(label="Scan Renames", command=self.scan_bulk_renames)
+        tools_menu.add_command(label="Clear Rename Preview", command=self.clear_bulk_rename_preview)
+        tools_menu.add_command(label="Apply Renames…", command=self.apply_bulk_renames)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+
         config_menu = tk.Menu(menubar, tearoff=False)
         config_menu.add_command(label="Preferences…", command=self.show_preferences)
         menubar.add_cascade(label="Config", menu=config_menu)
@@ -196,6 +206,10 @@ class FileViewerApp:
         B("Fit", self.fit_to_window)
         B("Zoom In", lambda: self._zoom(1.1))
         B("Zoom Out", lambda: self._zoom(1/1.1))
+        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        B("Scan Renames", self.scan_bulk_renames)
+        B("Clear Preview", self.clear_bulk_rename_preview)
+        B("Apply Renames…", self.apply_bulk_renames)
         ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
         B("Shortcuts", self.show_shortcuts)
 
@@ -274,14 +288,16 @@ class FileViewerApp:
         self.root.bind_all("<Key-minus>", lambda e: self._zoom(1/1.1))
         self.root.bind_all("<Key-f>", lambda e: self.fit_to_window())
         self.root.bind_all("<F1>", lambda e: self.show_shortcuts())
+        self.root.bind_all("<F2>", lambda e: self._begin_inline_rename())  # rename shortcut
 
         # listbox
-        self.listbox.bind("<<ListboxSelect>>", self._on_select)
-        self.listbox.bind("<Double-1>", lambda e: self.open_selected())
+        self.listbox.bind("<<ListboxSelect>>", self._on_select)       # open on select
+        self.listbox.bind("<Double-1>", self._begin_inline_rename)    # double-click to rename
         self.listbox.bind("<Return>", lambda e: self.open_selected())
         # context
         self._ctx = tk.Menu(self.root, tearoff=False)
         self._ctx.add_command(label="Open", command=self.open_selected)
+        self._ctx.add_command(label="Rename…", command=self._begin_inline_rename)
         self._ctx.add_command(label="Open Externally", command=self.open_external)
         self._ctx.add_command(label="Show in Folder", command=self.reveal_selected)
         self._ctx.add_separator()
@@ -352,6 +368,16 @@ class FileViewerApp:
         if 0 <= idx < len(self.files):
             self.files.pop(idx)
             self.listbox.delete(idx)
+            # also clear any preview entry shift
+            if idx in self.rename_preview:
+                self.rename_preview.pop(idx, None)
+            new_preview = {}
+            for k, v in self.rename_preview.items():
+                if k > idx:
+                    new_preview[k-1] = v
+                elif k < idx:
+                    new_preview[k] = v
+            self.rename_preview = new_preview
             if self.files:
                 new_idx = min(idx, len(self.files) - 1)
                 self.listbox.selection_clear(0, tk.END)
@@ -366,13 +392,14 @@ class FileViewerApp:
 
     def load_directory(self, dirpath: str):
         self.current_dir = dirpath
-        entries = []  # type: list[str]
+        self.rename_preview.clear()
+        entries = []
         try:
             for f in os.listdir(dirpath):
                 if f.lower().endswith(SUPPORTED_EXTS):
                     entries.append(os.path.join(dirpath, f))
         except Exception as e:
-            messagebox.showerror("Error", "Could not list directory:" + str(e))
+            messagebox.showerror("Error", "Could not list directory:\n" + str(e))
             return
         entries.sort(key=lambda p: os.path.basename(p).lower())
         self.files = entries
@@ -485,7 +512,7 @@ class FileViewerApp:
                 self._show_canvas_viewer()
                 self._set_page_nav_visible(False)
         except Exception as e:
-            messagebox.showerror("Open Error", "Could not open " + os.path.basename(path) + "" + str(e))
+            messagebox.showerror("Open Error", "Could not open " + os.path.basename(path) + "\n" + str(e))
             self._clear_canvas()
             self._update_status()
             return
@@ -501,7 +528,7 @@ class FileViewerApp:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
         except Exception as e:
-            messagebox.showerror("Open Error", "Could not read text file:" + str(e))
+            messagebox.showerror("Open Error", "Could not read text file:\n" + str(e))
             content = ""
         self.text_widget.configure(state="normal")
         self.text_widget.delete("1.0", tk.END)
@@ -539,7 +566,6 @@ class FileViewerApp:
         self.tk_image = ImageTk.PhotoImage(scaled)
 
         self.canvas.delete("all")
-        # place at (0,0) and use scrollregion; center via xview/yview when needed
         self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
         self.canvas.config(scrollregion=(0, 0, scaled.width, scaled.height))
 
@@ -571,7 +597,7 @@ class FileViewerApp:
             return
         self.scale = new_scale
         self.auto_fit = False
-        self._center_next_render = False  # preserve current view on zoom
+        self._center_next_render = False
         self._render_to_canvas()
         self._update_status()
 
@@ -695,7 +721,279 @@ class FileViewerApp:
             self.doc_page_index = frame_index
             self.doc_page_count = total
         except Exception as e:
-            messagebox.showerror("Page", "Could not change page:" + str(e))
+            messagebox.showerror("Page", "Could not change page:\n" + str(e))
+
+    # ----- Bulk rename helpers -----
+    def _suggest_rename_for_base(self, base_without_ext: str, ext: str) -> str | None:
+        # collect all ( ... ) contents anywhere; remove them for pattern detection
+        paren_pat = re.compile(r"\(([^)]*)\)")
+        notes = paren_pat.findall(base_without_ext)
+        remainder = paren_pat.sub("", base_without_ext).strip()
+
+        # strictly numeric
+        if re.fullmatch(r"\d+", remainder):
+            new_base = "Map#" + remainder
+        else:
+            m = re.fullmatch(r"(\d+)-(\d+)", remainder)
+            if not m:
+                return None
+            a = m.group(1)
+            b = m.group(2)
+            new_base = "Vol." + a + "-Pg." + b
+        if notes:
+            joined = " ".join([n.strip() for n in notes if n.strip() != ""])
+            if joined != "":
+                new_base = new_base + " (" + joined + ")"
+        return new_base + ext
+
+    def scan_bulk_renames(self):
+        """Compute preview names per your rules and paint matches blue in the listbox."""
+        self.rename_preview.clear()
+        for i, p in enumerate(self.files):
+            base = os.path.basename(p)
+            root, ext = os.path.splitext(base)
+            suggestion = self._suggest_rename_for_base(root, ext)
+            self.listbox.delete(i)
+            self.listbox.insert(i, suggestion if suggestion else base)
+            if suggestion:
+                self.rename_preview[i] = suggestion
+                try:
+                    self.listbox.itemconfig(i, fg="blue")
+                except Exception:
+                    pass
+            else:
+                try:
+                    self.listbox.itemconfig(i, fg="black")
+                except Exception:
+                    pass
+        if self.current_index is not None and self.current_index < self.listbox.size():
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(self.current_index)
+            self.listbox.activate(self.current_index)
+
+    def clear_bulk_rename_preview(self):
+        """Revert sidebar display to original basenames and clear rename preview state."""
+        for i, p in enumerate(self.files):
+            base = os.path.basename(p)
+            try:
+                self.listbox.delete(i)
+                self.listbox.insert(i, base)
+                try:
+                    self.listbox.itemconfig(i, fg="black")
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        self.rename_preview.clear()
+        if self.current_index is not None and self.current_index < self.listbox.size():
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(self.current_index)
+            self.listbox.activate(self.current_index)
+
+    def _unique_name_in_folder(self, folder: str, desired_name: str) -> str:
+        """Return a non-conflicting name (Append " (2)", " (3)", ... before the extension)."""
+        name_root, ext = os.path.splitext(desired_name)
+        candidate = desired_name
+        n = 2
+        while os.path.exists(os.path.join(folder, candidate)):
+            candidate = name_root + " (" + str(n) + ")" + ext
+            n += 1
+        return candidate
+
+    def apply_bulk_renames(self):
+        if not self.rename_preview:
+            messagebox.showinfo("Apply Renames", "Nothing to rename. Use Scan Renames first.")
+            return
+        count = len(self.rename_preview)
+        proceed = messagebox.askyesno("Apply Renames", "Rename " + str(count) + " file(s) now? This cannot be undone.")
+        if not proceed:
+            return
+        new_files = list(self.files)
+        for i, new_display in list(self.rename_preview.items()):
+            if i < 0 or i >= len(self.files):
+                continue
+            old_full = self.files[i]
+            folder = os.path.dirname(old_full)
+            old_base = os.path.basename(old_full)
+            root_disk, ext_disk = os.path.splitext(old_base)
+            root_new, _ = os.path.splitext(new_display)
+            dest_name = root_new + ext_disk
+            if os.path.exists(os.path.join(folder, dest_name)):
+                dest_name = self._unique_name_in_folder(folder, dest_name)
+            src = old_full
+            dst = os.path.join(folder, dest_name)
+            try:
+                os.rename(src, dst)
+            except Exception as e:
+                messagebox.showerror("Rename", "Could not rename:\n" + src + "\n→ " + dst + "\n" + str(e))
+                continue
+            new_files[i] = dst
+            self.listbox.delete(i)
+            self.listbox.insert(i, dest_name)
+            try:
+                self.listbox.itemconfig(i, fg="black")
+            except Exception:
+                pass
+            if self.current_index == i:
+                self.current_path = dst
+        self.files = new_files
+        self.rename_preview.clear()
+        if self.current_index is not None and self.current_index < len(self.files):
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(self.current_index)
+            self.listbox.activate(self.current_index)
+        messagebox.showinfo("Apply Renames", "Renaming complete.")
+
+    # ----- Inline manual rename -----
+    def _begin_inline_rename(self, event=None):
+        # If an editor is already open, ignore
+        if self._inline_editor is not None:
+            try:
+                self._inline_editor.focus_set()
+            except Exception:
+                pass
+            return
+
+        # Determine index: from event (mouse) or current selection (F2/context)
+        idx = None
+        if event is not None and hasattr(event, "y"):
+            try:
+                idx = int(self.listbox.nearest(event.y))
+            except Exception:
+                idx = None
+        if idx is None:
+            sel = self.listbox.curselection()
+            if sel:
+                idx = int(sel[0])
+        if idx is None or idx < 0 or idx >= self.listbox.size():
+            self.root.bell()
+            return
+
+        # Ensure selection is on this item (and open it, to match your "select = open" behavior)
+        self.listbox.selection_clear(0, tk.END)
+        self.listbox.selection_set(idx)
+        self.listbox.activate(idx)
+        self._open_index(idx)
+
+        # Get on-screen bbox for the list item
+        bbox = self.listbox.bbox(idx)
+        if not bbox:
+            # If item not visible, make it visible
+            self.listbox.see(idx)
+            bbox = self.listbox.bbox(idx)
+        if not bbox:
+            self.root.bell()
+            return
+
+        x, y, w, h = bbox
+        current_label = self.listbox.get(idx)
+        # Use on-disk basename (not preview) when possible
+        try:
+            actual_base = os.path.basename(self.files[idx])
+        except Exception:
+            actual_base = current_label
+
+        # Create overlay Entry
+        e = ttk.Entry(self.listbox)
+        e.place(x=x, y=y, width=max(w, 80), height=h)
+        e.insert(0, actual_base)
+        e.focus_set()
+
+        # Select only name before extension, like Windows Explorer
+        dot = actual_base.rfind(".")
+        if dot > 0:
+            try:
+                e.selection_range(0, dot)
+            except Exception:
+                pass
+        else:
+            try:
+                e.selection_range(0, tk.END)
+            except Exception:
+                pass
+
+        self._inline_editor = e
+        self._inline_editor_index = idx
+
+        def commit():
+            self._commit_inline_rename()
+
+        def cancel(_evt=None):
+            self._cancel_inline_rename()
+
+        e.bind("<Return>", lambda _ev: commit())
+        e.bind("<KP_Enter>", lambda _ev: commit())
+        e.bind("<Escape>", cancel)
+        e.bind("<FocusOut>", lambda _ev: commit())
+
+    def _commit_inline_rename(self):
+        if self._inline_editor is None or self._inline_editor_index is None:
+            return
+        e = self._inline_editor
+        idx = self._inline_editor_index
+        new_name = e.get().strip()
+
+        # Clean up editor first (so focus change doesn't recurse)
+        try:
+            e.destroy()
+        except Exception:
+            pass
+        self._inline_editor = None
+        self._inline_editor_index = None
+
+        if new_name == "":
+            self.root.bell()
+            return
+
+        # Keep original extension; disallow changing it
+        try:
+            full_old = self.files[idx]
+            folder = os.path.dirname(full_old)
+            base_old = os.path.basename(full_old)
+            old_root, old_ext = os.path.splitext(base_old)
+            new_root, new_ext = os.path.splitext(new_name)
+            # Force original extension
+            dest_name = (new_root if new_root != "" else old_root) + old_ext
+            # Avoid conflicts
+            if os.path.exists(os.path.join(folder, dest_name)):
+                dest_name = self._unique_name_in_folder(folder, dest_name)
+            dst = os.path.join(folder, dest_name)
+            # If name actually changed, rename on disk
+            if dest_name != base_old:
+                try:
+                    os.rename(full_old, dst)
+                except Exception as ex:
+                    messagebox.showerror("Rename", "Could not rename:\n" + full_old + "\n→ " + dst + "\n" + str(ex))
+                    return
+                # update in-memory path list
+                self.files[idx] = dst
+                if self.current_index == idx:
+                    self.current_path = dst
+            # Update listbox label and clear any bulk preview override
+            self.listbox.delete(idx)
+            self.listbox.insert(idx, dest_name)
+            try:
+                self.listbox.itemconfig(idx, fg="black")
+            except Exception:
+                pass
+            if idx in self.rename_preview:
+                self.rename_preview.pop(idx, None)
+            # keep selection
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(idx)
+            self.listbox.activate(idx)
+        except Exception as e2:
+            messagebox.showerror("Rename", "Unexpected error:\n" + str(e2))
+
+    def _cancel_inline_rename(self):
+        if self._inline_editor is None:
+            return
+        try:
+            self._inline_editor.destroy()
+        except Exception:
+            pass
+        self._inline_editor = None
+        self._inline_editor_index = None
 
     # ----- session & config (manual sessions) -----
     def _state_path(self) -> str:
@@ -715,7 +1013,9 @@ class FileViewerApp:
         self._write_session(path)
 
     def save_session_as(self):
-        path = filedialog.asksaveasfilename(title="Save Session As…", defaultextension=".json", filetypes=[("JSON", "*.json")])
+        path = filedialog.asksaveasfilename(
+            title="Save Session As…", defaultextension=".json", filetypes=[("JSON", "*.json")]
+        )
         if not path:
             return
         self._write_session(path)
@@ -732,10 +1032,12 @@ class FileViewerApp:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            messagebox.showerror("Save Session", "Could not save session:" + str(e))
+            messagebox.showerror("Save Session", "Could not save session:\n" + str(e))
 
     def load_session_from_file(self):
-        path = filedialog.askopenfilename(title="Load Session…", filetypes=[("JSON", "*.json"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(
+            title="Load Session…", filetypes=[("JSON", "*.json"), ("All files", "*.*")]
+        )
         if not path:
             return
         try:
@@ -757,7 +1059,7 @@ class FileViewerApp:
                 self.page_entry_var.set(str(self.doc_page_index + 1))
                 self.page_go()
         except Exception as e:
-            messagebox.showerror("Load Session", "Could not load session:" + str(e))
+            messagebox.showerror("Load Session", "Could not load session:\n" + str(e))
 
     def _load_config(self):
         path = self._config_path()
@@ -780,6 +1082,7 @@ class FileViewerApp:
 
     def clear_session_ui(self):
         self.files.clear()
+        self.rename_preview.clear()
         self.listbox.delete(0, tk.END)
         self._clear_canvas()
         self.current_index = None
@@ -867,19 +1170,28 @@ class FileViewerApp:
         sess_entry = ttk.Entry(frm, textvariable=sess_var, width=50)
         sess_entry.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(8, 0))
         def choose_sess():
-            p = filedialog.asksaveasfilename(title="Choose default session file", defaultextension=".json", filetypes=[("JSON", "*.json")])
+            p = filedialog.asksaveasfilename(
+                title="Choose default session file",
+                defaultextension=".json",
+                filetypes=[("JSON", "*.json")]
+            )
             if p:
                 sess_var.set(p)
         ttk.Button(frm, text="Browse…", command=choose_sess).grid(row=1, column=2, padx=(6, 0), pady=(8, 0))
 
         frm.columnconfigure(1, weight=1)
 
-        def do_save_prefs():
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=3, sticky="e", pady=(12, 0))
+        def do_ok():
             self.config["default_open_dir"] = open_var.get().strip() or None
             self.config["default_session_path"] = sess_var.get().strip() or None
             self._save_config()
             top.destroy()
-        ttk.Button(frm, text="Save", command=do_save_prefs).grid(row=2, column=2, sticky="e", pady=(12, 0))
+        def do_cancel():
+            top.destroy()
+        ttk.Button(btns, text="Cancel", command=do_cancel).pack(side=tk.RIGHT, padx=(6, 0))
+        ttk.Button(btns, text="OK", command=do_ok).pack(side=tk.RIGHT)
 
     # ----- shortcuts dialog -----
     def show_shortcuts(self):
@@ -903,6 +1215,7 @@ def get_shortcuts_text() -> str:
     lines = [
         "Ctrl+O — Open Folder",
         "Ctrl+Shift+O — Add Files",
+        "F2 — Rename",
         "Delete — Remove selected",
         "Ctrl+S — Save session",
         "Enter/Double-click — Open selected",
