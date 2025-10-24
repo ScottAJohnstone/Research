@@ -12,6 +12,7 @@ from tkinter import ttk
 from idlelib.tooltip import Hovertip
 import rename  # rename.py
 import research  # research.py
+import fileviewer # fileviewer.py
 
 
 class TabbedApp:
@@ -56,6 +57,7 @@ class TabbedApp:
         # Tab 3 - File Viewer
         self.tab3 = ttk.Frame(self.notebook)
         self.notebook.add(self.tab3, text="File Viewer")
+        fileviewer.main(self.tab3)  # Load fileviewer.py into tab #!needs to be put into class
 
         # Tab 4 - Help
         self.tab4 = ttk.Frame(self.notebook)
