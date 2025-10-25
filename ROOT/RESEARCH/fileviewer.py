@@ -1,11 +1,3 @@
-"""
-. Research V2:	File Viewer 
-. Image/PDF/Text File Viewer
-. Runs fileviewer.py
-"""
-#/                                                                                                               #/
-#/                                                                                                               #/
-# T1.py
 import os
 import sys
 import json
@@ -17,17 +9,18 @@ from PIL import Image, ImageTk
 from PIL.Image import Resampling
 
 """
-T1.py — Image/PDF/Text File Viewer (stable)
+Image/PDF/Text File Viewer (stable, with pop-out mirror and placeholders)
 
-- No f-strings (uses concatenation)
-- Zoom + pan, Fit-to-Window
-- Manual sessions (Save/Load); Config (preferences/presets) persists
-- Presets (save/load lists)
-- Preferences (default open dir, default session file)
-- Multi-page pager (PDF, multi-frame TIFF) + page jump
-- Text viewer (.txt/.md/.csv/.log/.res)
-- Bulk Rename (scan → blue preview, clear, apply) with conflict-safe writes
-- NEW: Inline manual rename on list (double-click, F2, context menu)
+- No f-strings (uses concatenation) to avoid parser issues you saw earlier
+- Fit-to-Window, pan (mouse drag), zoom (+/- or wheel)
+- Sessions are MANUAL ONLY (Save/Load via menu). Config (preferences/presets) persists
+- Presets menu (save/load the current file list)
+- Multi-page pager (PDF & multi-frame TIFF)
+- Text viewer for .txt/.md/.csv/.log/.res
+- Pop Out window mirrors the main preview; shortcuts act on both, panning is kept in sync
+- Left inputs use ghost placeholders that disappear on focus and return if empty
+- Resizable layout; right preview area a bit larger by default; min-widths to keep things visible
+- Bulk Rename (preview + apply) following your rules
 """
 
 try:
@@ -78,8 +71,8 @@ class FileViewerApp:
     def __init__(self, root, start_dir: str | None = None):
         self.root = root
         self.root.title("File Viewer")
-        self.root.geometry("1400x920")      # larger start size per request
-        self.root.minsize(1100, 700)
+        self.root.geometry("1480x940")   # a bit larger to comfortably fit everything
+        self.root.minsize(1200, 780)
 
         # ttk padding tweaks (keep system colors)
         try:
@@ -100,11 +93,16 @@ class FileViewerApp:
         # image/pdf render state
         self.base_image = None         # type: Image.Image | None
         self.tk_image = None           # type: ImageTk.PhotoImage | None
-        self.scale = 1.0
+        self.scale = 1.0               # current scale applied to base_image
         self.min_scale = 0.1
         self.max_scale = 8.0
-        self.auto_fit = True
-        self._center_next_render = True
+        self.auto_fit = True           # if True, resize triggers re-fit
+        self._center_next_render = True  # center view on next render
+
+        # pop-out window mirror
+        self.popwin = None
+        self.pop_canvas = None
+        self.pop_tk_image = None
 
         # multi-page
         self.pdf_doc = None
@@ -114,17 +112,13 @@ class FileViewerApp:
 
         # config (preferences + presets)
         self.config = {
-            "default_open_dir": None,
-            "default_session_path": None,
-            "presets": {}
+            "default_open_dir": None,          # str | None
+            "default_session_path": None,      # str | None
+            "presets": {}                      # name -> list[str]
         }
 
-        # rename preview state (bulk)
-        self.rename_preview = {}   # index -> new_basename (with ext preserved)
-
-        # inline rename editor (manual rename)
-        self._inline_editor = None
-        self._inline_editor_index = None
+        # rename preview state
+        self.rename_preview = {}   # index -> new_basename (with extension preserved)
 
         # ui
         self._build_menu()
@@ -138,6 +132,9 @@ class FileViewerApp:
         if self.current_dir and os.path.isdir(self.current_dir) and not self.files:
             self.load_directory(self.current_dir)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # set initial sash (~45% left, 55% right — larger preview)
+        self.root.after(60, self._init_panes)
 
     # ----- UI -----
     def _build_menu(self):
@@ -158,6 +155,8 @@ class FileViewerApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Fit to Window", command=self.fit_to_window, accelerator="F")
+        view_menu.add_command(label="Fit Width", command=self.fit_width)
+        view_menu.add_command(label="Fit Height", command=self.fit_height)
         view_menu.add_command(label="Zoom In", command=lambda: self._zoom(1.1), accelerator="+")
         view_menu.add_command(label="Zoom Out", command=lambda: self._zoom(1/1.1), accelerator="-")
         menubar.add_cascade(label="View", menu=view_menu)
@@ -173,10 +172,6 @@ class FileViewerApp:
         tools_menu.add_command(label="Apply Renames…", command=self.apply_bulk_renames)
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
-        config_menu = tk.Menu(menubar, tearoff=False)
-        config_menu.add_command(label="Preferences…", command=self.show_preferences)
-        menubar.add_cascade(label="Config", menu=config_menu)
-
         help_menu = tk.Menu(menubar, tearoff=False)
         help_menu.add_command(label="Keyboard Shortcuts", command=self.show_shortcuts, accelerator="F1")
         menubar.add_cascade(label="Help", menu=help_menu)
@@ -184,65 +179,101 @@ class FileViewerApp:
         self.root.config(menu=menubar)
 
     def _build_layout(self):
-        self.root.rowconfigure(1, weight=1)
-        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=1)
 
-        # toolbar
-        tb = ttk.Frame(self.root, padding=(6, 4))
-        tb.grid(row=0, column=0, columnspan=2, sticky="ew")
+        # Paned window: LEFT (tree + inputs) | RIGHT (preview + controls)
+        self.pw = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
+        self.pw.grid(row=0, column=0, sticky="nsew")
 
-        def B(text, cmd):
-            b = ttk.Button(tb, text=text, command=cmd)
-            b.pack(side=tk.LEFT, padx=3)
-            return b
+        # =============== LEFT =================
+        self.left_frame = ttk.Frame(self.pw, padding=(8, 8, 6, 8))
+        self.left_frame.columnconfigure(0, weight=1, minsize=560)
+        self.left_frame.rowconfigure(1, weight=1)
+        self.pw.add(self.left_frame, weight=3)
 
-        B("Open Folder", self.open_folder)
-        B("Add Files", self.add_files)
-        B("Remove", self.remove_selected)
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
-        B("Previous", self.prev_file)
-        B("Next", self.next_file)
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
-        B("Fit", self.fit_to_window)
-        B("Zoom In", lambda: self._zoom(1.1))
-        B("Zoom Out", lambda: self._zoom(1/1.1))
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
-        B("Scan Renames", self.scan_bulk_renames)
-        B("Clear Preview", self.clear_bulk_rename_preview)
-        B("Apply Renames…", self.apply_bulk_renames)
-        ttk.Separator(tb, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=4)
-        B("Shortcuts", self.show_shortcuts)
+        # Treeview (no top label per request)
+        self.research = ttk.Treeview(
+            self.left_frame,
+            columns=("uuid", "name", "comments"),
+            show="headings",
+            selectmode="browse"
+        )
+        self.research.heading("uuid", text="UUID")
+        self.research.heading("name", text="Document Name")
+        self.research.heading("comments", text="Comments")
+        self.research.column("uuid", width=160, minwidth=140, anchor="w", stretch=False)
+        self.research.column("name", width=360, minwidth=320, anchor="w", stretch=True)
+        self.research.column("comments", width=220, minwidth=160, anchor="w", stretch=True)
+        self.research.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
+        r_sb = ttk.Scrollbar(self.left_frame, orient="vertical", command=self.research.yview)
+        r_sb.grid(row=1, column=1, sticky="ns", pady=(0, 8))
+        self.research.configure(yscrollcommand=r_sb.set)
 
-        # sidebar
-        sidebar = ttk.Frame(self.root)
-        sidebar.grid(row=1, column=0, sticky="nsw")
-        sidebar.rowconfigure(1, weight=1)
-        sidebar.columnconfigure(0, weight=1)
-        ttk.Label(sidebar, text="Files").grid(row=0, column=0, sticky="w", padx=8, pady=(6, 2))
-        self.listbox = tk.Listbox(sidebar, width=40, activestyle="dotbox")
-        self.listbox.grid(row=1, column=0, sticky="nsew")
-        sb = ttk.Scrollbar(sidebar, orient="vertical", command=self.listbox.yview)
-        sb.grid(row=1, column=1, sticky="ns")
-        self.listbox.configure(yscrollcommand=sb.set)
+        # demo rows
+        for i in range(1, 9):
+            self.research.insert("", "end", values=("UUID-" + str(i), "Document " + str(i), "Example note"))
 
-        # main frame (viewer + pager bar)
-        self.main_frame = ttk.Frame(self.root)
-        self.main_frame.grid(row=1, column=1, sticky="nsew")
-        self.main_frame.rowconfigure(0, weight=1)
-        self.main_frame.rowconfigure(1, weight=0)
-        self.main_frame.columnconfigure(0, weight=1)
+        # Two labeled text boxes with ghost placeholders
+        sub = ttk.Frame(self.left_frame)
+        sub.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        sub.columnconfigure(0, weight=1, minsize=260)
+        sub.columnconfigure(1, weight=1, minsize=260)
 
-        # canvas viewer
-        self.canvas_frame = ttk.Frame(self.main_frame)
-        self.canvas_frame.grid(row=0, column=0, sticky="nsew")
-        self.canvas_frame.rowconfigure(0, weight=1)
-        self.canvas_frame.columnconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self.canvas_frame, bg="#303030", highlightthickness=0)
+        doc_group = ttk.LabelFrame(sub, text="Documents")
+        com_group = ttk.LabelFrame(sub, text="Comments")
+        doc_group.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        com_group.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
+        self.doc_var = tk.StringVar()
+        self.com_var = tk.StringVar()
+        self.doc_entry = ttk.Entry(doc_group, textvariable=self.doc_var)
+        self.com_entry = ttk.Entry(com_group, textvariable=self.com_var)
+        self.doc_entry.pack(fill=tk.X, padx=8, pady=8)
+        self.com_entry.pack(fill=tk.X, padx=8, pady=8)
+        self._add_placeholder(self.doc_entry, "Documents")
+        self._add_placeholder(self.com_entry, "Comments")
+
+        # Bottom row of buttons + checkbox (placeholders)
+        actions = ttk.Frame(self.left_frame)
+        actions.grid(row=3, column=0, columnspan=2, sticky="ew")
+        for i in range(1, 6):
+            actions.columnconfigure(i, weight=1)
+        ttk.Button(actions, text="Enter Record").grid(row=0, column=0, padx=4, pady=6, sticky="ew")
+        ttk.Button(actions, text="Edit Record").grid(row=0, column=1, padx=4, pady=6, sticky="ew")
+        ttk.Button(actions, text="Delete Record").grid(row=0, column=2, padx=4, pady=6, sticky="ew")
+        ttk.Button(actions, text="Log to Files").grid(row=0, column=3, padx=4, pady=6, sticky="ew")
+        ttk.Checkbutton(actions, text="A Butter").grid(row=0, column=4, padx=4, pady=6, sticky="e")
+
+        # =============== RIGHT =================
+        self.right = ttk.Frame(self.pw, padding=(6, 8, 8, 8))
+        self.right.columnconfigure(0, weight=1, minsize=560)
+        self.right.rowconfigure(1, weight=1)
+        self.right.rowconfigure(5, weight=1)
+        self.pw.add(self.right, weight=4)
+
+        # Top buttons row
+        topbar = ttk.Frame(self.right)
+        topbar.grid(row=0, column=0, sticky="ew")
+        for i in range(4):
+            topbar.columnconfigure(i, weight=1)
+        ttk.Button(topbar, text="Open Folder", command=self.open_folder).grid(row=0, column=0, padx=4, pady=(0, 6), sticky="ew")
+        ttk.Button(topbar, text="Add File", command=self.add_files).grid(row=0, column=1, padx=4, pady=(0, 6), sticky="ew")
+        ttk.Button(topbar, text="Remove File", command=self.remove_selected).grid(row=0, column=2, padx=4, pady=(0, 6), sticky="ew")
+        ttk.Button(topbar, text="Pop Out", command=self.pop_out).grid(row=0, column=3, padx=4, pady=(0, 6), sticky="ew")
+
+        # Preview window (Canvas/Text) — larger area
+        preview_border = ttk.Frame(self.right, relief="groove", borderwidth=2)
+        preview_border.grid(row=1, column=0, sticky="nsew")
+        preview_border.rowconfigure(0, weight=1)
+        preview_border.columnconfigure(0, weight=1)
+
+        self.canvas = tk.Canvas(preview_border, bg="#303030", highlightthickness=0)
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.image_id = self.canvas.create_image(0, 0, anchor="nw")
 
-        # text viewer
-        self.text_frame = ttk.Frame(self.main_frame)
+        # Text viewer
+        self.text_frame = ttk.Frame(preview_border)
         self.text_frame.rowconfigure(0, weight=1)
         self.text_frame.columnconfigure(0, weight=1)
         self.text_widget = tk.Text(self.text_frame, wrap="none", font=("Consolas", 11))
@@ -254,29 +285,79 @@ class FileViewerApp:
         thsb.grid(row=1, column=0, sticky="ew")
         self.text_widget.configure(yscrollcommand=tvsb.set, xscrollcommand=thsb.set)
 
-        # pager bar (bottom-left)
-        self.page_bar = ttk.Frame(self.main_frame, padding=(8, 6))
-        self.page_bar.grid(row=1, column=0, sticky="w")
-        self.page_prev_btn = ttk.Button(self.page_bar, text="◀ Previous", command=self.page_prev, width=10)
+        # Row: Prev/Next (full width)
+        nav_row = ttk.Frame(self.right)
+        nav_row.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        nav_row.columnconfigure(0, weight=1)
+        nav_row.columnconfigure(1, weight=1)
+        ttk.Button(nav_row, text="Previous File", command=self.prev_file).grid(row=0, column=0, padx=4, sticky="ew")
+        ttk.Button(nav_row, text="Next File", command=self.next_file).grid(row=0, column=1, padx=4, sticky="ew")
+
+        # Row: Fit W | Fit H | Zoom + | Help
+        zoom_row = ttk.Frame(self.right)
+        zoom_row.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        for i in range(4):
+            zoom_row.columnconfigure(i, weight=1)
+        ttk.Button(zoom_row, text="Fit W", command=self.fit_width).grid(row=0, column=0, padx=4, sticky="ew")
+        ttk.Button(zoom_row, text="Fit H", command=self.fit_height).grid(row=0, column=1, padx=4, sticky="ew")
+        ttk.Button(zoom_row, text="Zoom +", command=lambda: self._zoom(1.1)).grid(row=0, column=2, padx=4, sticky="ew")
+        ttk.Button(zoom_row, text="Help", command=self.show_shortcuts).grid(row=0, column=3, padx=4, sticky="ew")
+
+        # Row: Scan | Clear | Apply
+        tools_row = ttk.Frame(self.right)
+        tools_row.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        for i in range(3):
+            tools_row.columnconfigure(i, weight=1)
+        ttk.Button(tools_row, text="Scan", command=self.scan_bulk_renames).grid(row=0, column=0, padx=4, sticky="ew")
+        ttk.Button(tools_row, text="Clear", command=self.clear_bulk_rename_preview).grid(row=0, column=1, padx=4, sticky="ew")
+        ttk.Button(tools_row, text="Apply", command=self.apply_bulk_renames).grid(row=0, column=2, padx=4, sticky="ew")
+
+        # List of files
+        files_box = ttk.LabelFrame(self.right, text="List of files")
+        files_box.grid(row=5, column=0, sticky="nsew", pady=(8, 0))
+        files_box.rowconfigure(0, weight=1)
+        files_box.columnconfigure(0, weight=1)
+
+        self.listbox = tk.Listbox(files_box, activestyle="dotbox")
+        self.listbox.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        sb = ttk.Scrollbar(files_box, orient="vertical", command=self.listbox.yview)
+        sb.grid(row=0, column=1, sticky="ns", pady=6)
+        self.listbox.configure(yscrollcommand=sb.set)
+
+        # Pager (hidden until needed)
+        self.page_bar = ttk.Frame(self.right)
+        self.page_bar.grid_forget()
+        self.page_prev_btn = ttk.Button(self.page_bar, text="◀ Prev", command=self.page_prev, width=8)
         self.page_entry_var = tk.StringVar(value="1")
         self.page_entry = ttk.Entry(self.page_bar, width=6, textvariable=self.page_entry_var)
         self.page_go_btn = ttk.Button(self.page_bar, text="Go", command=self.page_go, width=4)
         self.page_label = ttk.Label(self.page_bar, text="/ 1")
-        self.page_next_btn = ttk.Button(self.page_bar, text="Next ▶", command=self.page_next, width=10)
+        self.page_next_btn = ttk.Button(self.page_bar, text="Next ▶", command=self.page_next, width=8)
         self.page_prev_btn.pack(side=tk.LEFT)
         ttk.Label(self.page_bar, text=" Page ").pack(side=tk.LEFT)
         self.page_entry.pack(side=tk.LEFT)
         self.page_label.pack(side=tk.LEFT, padx=(6, 6))
         self.page_go_btn.pack(side=tk.LEFT)
         self.page_next_btn.pack(side=tk.LEFT, padx=(8, 0))
-        self._set_page_nav_visible(False)
 
-        # status bar
-        self.status = ttk.Label(self.root, text="Ready", anchor="w", padding=(8, 3))
-        self.status.grid(row=2, column=0, columnspan=2, sticky="ew")
+        # Status bar
+        self.status = ttk.Label(self.root, text="Ready", anchor="w", padding=(8, 4))
+        self.status.grid(row=1, column=0, sticky="ew")
 
+    def _init_panes(self):
+        try:
+            self.pw.pane(self.left_frame, minsize=560)
+            self.pw.pane(self.right, minsize=560)
+        except Exception:
+            pass
+        try:
+            total = self.pw.winfo_width() or self.root.winfo_width()
+            self.pw.sashpos(0, int(total * 0.45))  # bigger preview (right ~55%)
+        except Exception:
+            pass
+
+    # ----- events -----
     def _bind_events(self):
-        # global keys
         self.root.bind_all("<Control-o>", lambda e: self.open_folder())
         self.root.bind_all("<Control-Shift-o>", lambda e: self.add_files())
         self.root.bind_all("<Delete>", lambda e: self.remove_selected())
@@ -288,16 +369,12 @@ class FileViewerApp:
         self.root.bind_all("<Key-minus>", lambda e: self._zoom(1/1.1))
         self.root.bind_all("<Key-f>", lambda e: self.fit_to_window())
         self.root.bind_all("<F1>", lambda e: self.show_shortcuts())
-        self.root.bind_all("<F2>", lambda e: self._begin_inline_rename())  # rename shortcut
 
-        # listbox
-        self.listbox.bind("<<ListboxSelect>>", self._on_select)       # open on select
-        self.listbox.bind("<Double-1>", self._begin_inline_rename)    # double-click to rename
+        self.listbox.bind("<<ListboxSelect>>", self._on_select)
+        self.listbox.bind("<Double-1>", lambda e: self.open_selected())
         self.listbox.bind("<Return>", lambda e: self.open_selected())
-        # context
         self._ctx = tk.Menu(self.root, tearoff=False)
         self._ctx.add_command(label="Open", command=self.open_selected)
-        self._ctx.add_command(label="Rename…", command=self._begin_inline_rename)
         self._ctx.add_command(label="Open Externally", command=self.open_external)
         self._ctx.add_command(label="Show in Folder", command=self.reveal_selected)
         self._ctx.add_separator()
@@ -305,16 +382,40 @@ class FileViewerApp:
         self.listbox.bind("<Button-3>", self._show_ctx)
         self.listbox.bind("<Control-Button-1>", self._show_ctx)
 
-        # canvas: zoom + PAN
+        # main canvas
         self.canvas.bind("<Configure>", self._on_canvas_resize)
-        self.canvas.bind("<MouseWheel>", self._on_wheel)      # Win/mac
-        self.canvas.bind("<Button-4>", self._on_wheel_linux)  # Linux up
-        self.canvas.bind("<Button-5>", self._on_wheel_linux)  # Linux down
-        self.canvas.bind("<ButtonPress-1>", self._start_pan)
-        self.canvas.bind("<B1-Motion>", self._do_pan)
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<Button-4>", self._on_wheel_linux)
+        self.canvas.bind("<Button-5>", self._on_wheel_linux)
+        self.canvas.bind("<ButtonPress-1>", lambda e: self._start_pan(self.canvas, e))
+        self.canvas.bind("<B1-Motion>", lambda e: self._do_pan(self.canvas, e))
 
-        # pager
         self.page_entry.bind("<Return>", lambda e: self.page_go())
+
+    # ----- placeholders -----
+    def _add_placeholder(self, entry: ttk.Entry, text: str):
+        normal_fg = entry.cget("foreground") or "black"
+        ph_fg = "#888"
+        entry._placeholder = text  # type: ignore[attr-defined]
+        entry._is_placeholder = True  # type: ignore[attr-defined]
+        entry.configure(foreground=ph_fg)
+        entry.insert(0, text)
+
+        def on_focus_in(_e):
+            if getattr(entry, "_is_placeholder", False):
+                entry.delete(0, tk.END)
+                entry.configure(foreground=normal_fg)
+                entry._is_placeholder = False  # type: ignore[attr-defined]
+
+        def on_focus_out(_e):
+            if entry.get().strip() == "":
+                entry.configure(foreground=ph_fg)
+                entry.delete(0, tk.END)
+                entry.insert(0, text)
+                entry._is_placeholder = True  # type: ignore[attr-defined]
+
+        entry.bind("<FocusIn>", on_focus_in)
+        entry.bind("<FocusOut>", on_focus_out)
 
     # ----- utils -----
     def _show_ctx(self, event):
@@ -325,9 +426,9 @@ class FileViewerApp:
 
     def _set_page_nav_visible(self, visible: bool):
         if visible:
-            self.page_bar.grid()
+            self.page_bar.grid(row=2, column=0, sticky="w", padx=8, pady=(6, 0))
         else:
-            self.page_bar.grid_remove()
+            self.page_bar.grid_forget()
 
     def _update_status(self):
         name = os.path.basename(self.current_path) if self.current_path else "—"
@@ -368,16 +469,12 @@ class FileViewerApp:
         if 0 <= idx < len(self.files):
             self.files.pop(idx)
             self.listbox.delete(idx)
-            # also clear any preview entry shift
             if idx in self.rename_preview:
                 self.rename_preview.pop(idx, None)
             new_preview = {}
             for k, v in self.rename_preview.items():
-                if k > idx:
-                    new_preview[k-1] = v
-                elif k < idx:
-                    new_preview[k] = v
-            self.rename_preview = new_preview
+                new_preview[k - 1 if k > idx else k] = v
+            self.rename_preview = {k: v for k, v in new_preview.items() if k >= 0}
             if self.files:
                 new_idx = min(idx, len(self.files) - 1)
                 self.listbox.selection_clear(0, tk.END)
@@ -454,10 +551,10 @@ class FileViewerApp:
     # ----- view switching -----
     def _show_canvas_viewer(self):
         self.text_frame.grid_forget()
-        self.canvas_frame.grid(row=0, column=0, sticky="nsew")
+        self.canvas.grid(row=0, column=0, sticky="nsew")
 
     def _show_text_viewer(self):
-        self.canvas_frame.grid_forget()
+        self.canvas.grid_forget()
         self.text_frame.grid(row=0, column=0, sticky="nsew")
 
     # ----- open path -----
@@ -555,7 +652,55 @@ class FileViewerApp:
         img_w, img_h = self.base_image.size
         return min(float(cv_w) / float(img_w), float(cv_h) / float(img_h))
 
+    def fit_width(self):
+        if self.mode != 'image' or not self.base_image:
+            return
+        cv_w = max(1, self.canvas.winfo_width())
+        img_w = self.base_image.size[0]
+        self.scale = max(self.min_scale, min(self.max_scale, float(cv_w) / float(img_w)))
+        self.auto_fit = False
+        self._center_next_render = True
+        self._render_all()
+        self._update_status()
+
+    def fit_height(self):
+        if self.mode != 'image' or not self.base_image:
+            return
+        cv_h = max(1, self.canvas.winfo_height())
+        img_h = self.base_image.size[1]
+        self.scale = max(self.min_scale, min(self.max_scale, float(cv_h) / float(img_h)))
+        self.auto_fit = False
+        self._center_next_render = True
+        self._render_all()
+        self._update_status()
+
     # ----- canvas render & zoom & pan -----
+    def _render_all(self):
+        # render main
+        self._render_to_canvas()
+        # render popup mirror if present
+        if self.pop_canvas is not None and self.base_image is not None:
+            img = self.base_image
+            w = max(1, int(img.width * self.scale))
+            h = max(1, int(img.height * self.scale))
+            scaled = img.resize((w, h), Resampling.LANCZOS)
+            self.pop_tk_image = ImageTk.PhotoImage(scaled)
+            self.pop_canvas.delete("all")
+            self.pop_canvas.create_image(0, 0, anchor="nw", image=self.pop_tk_image)
+            self.pop_canvas.config(scrollregion=(0, 0, scaled.width, scaled.height))
+            # center once when opening
+            try:
+                cv_w = max(1, self.pop_canvas.winfo_width())
+                cv_h = max(1, self.pop_canvas.winfo_height())
+                x0 = max(0, (scaled.width - cv_w) / 2.0)
+                y0 = max(0, (scaled.height - cv_h) / 2.0)
+                if scaled.width > 0:
+                    self.pop_canvas.xview_moveto(x0 / float(scaled.width))
+                if scaled.height > 0:
+                    self.pop_canvas.yview_moveto(y0 / float(scaled.height))
+            except Exception:
+                pass
+
     def _render_to_canvas(self):
         if not self.base_image:
             return
@@ -564,11 +709,9 @@ class FileViewerApp:
         h = max(1, int(img.height * self.scale))
         scaled = img.resize((w, h), Resampling.LANCZOS)
         self.tk_image = ImageTk.PhotoImage(scaled)
-
         self.canvas.delete("all")
         self.image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
         self.canvas.config(scrollregion=(0, 0, scaled.width, scaled.height))
-
         if self._center_next_render:
             cv_w = max(1, self.canvas.winfo_width())
             cv_h = max(1, self.canvas.winfo_height())
@@ -586,7 +729,7 @@ class FileViewerApp:
         if self.auto_fit:
             self.scale = self._fit_scale()
             self._center_next_render = True
-        self._render_to_canvas()
+        self._render_all()
         self._update_status()
 
     def _zoom(self, factor: float):
@@ -598,19 +741,29 @@ class FileViewerApp:
         self.scale = new_scale
         self.auto_fit = False
         self._center_next_render = False
-        self._render_to_canvas()
+        self._render_all()
         self._update_status()
 
-    # --- panning ---
-    def _start_pan(self, event):
+    # --- panning (sync both canvases) ---
+    def _start_pan(self, canvas: tk.Canvas, event):
         if self.mode != 'image' or not self.base_image:
             return
-        self.canvas.scan_mark(event.x, event.y)
+        canvas.scan_mark(event.x, event.y)
 
-    def _do_pan(self, event):
+    def _do_pan(self, canvas: tk.Canvas, event):
         if self.mode != 'image' or not self.base_image:
             return
-        self.canvas.scan_dragto(event.x, event.y, gain=1)
+        canvas.scan_dragto(event.x, event.y, gain=1)
+        # mirror pan positions
+        try:
+            if canvas is self.canvas and self.pop_canvas is not None:
+                self.pop_canvas.xview_moveto(self.canvas.xview()[0])
+                self.pop_canvas.yview_moveto(self.canvas.yview()[0])
+            elif canvas is self.pop_canvas:
+                self.canvas.xview_moveto(self.pop_canvas.xview()[0])
+                self.canvas.yview_moveto(self.pop_canvas.yview()[0])
+        except Exception:
+            pass
 
     def _on_wheel(self, event):
         if self.mode != 'image' or not self.base_image:
@@ -631,12 +784,18 @@ class FileViewerApp:
         self.scale = self._fit_scale()
         self.auto_fit = True
         self._center_next_render = True
-        self._render_to_canvas()
+        self._render_all()
         self._update_status()
 
     def _clear_canvas(self):
         self.canvas.delete("all")
         self.canvas.config(scrollregion=(0, 0, 0, 0))
+        if self.pop_canvas is not None:
+            try:
+                self.pop_canvas.delete("all")
+                self.pop_canvas.config(scrollregion=(0, 0, 0, 0))
+            except Exception:
+                pass
 
     # ----- pager -----
     def _update_page_nav(self):
@@ -666,7 +825,7 @@ class FileViewerApp:
         if self.auto_fit:
             self.scale = self._fit_scale()
             self._center_next_render = True
-        self._render_to_canvas()
+        self._render_all()
         self._update_page_nav()
         self._update_status()
 
@@ -682,7 +841,7 @@ class FileViewerApp:
         if self.auto_fit:
             self.scale = self._fit_scale()
             self._center_next_render = True
-        self._render_to_canvas()
+        self._render_all()
         self._update_page_nav()
         self._update_status()
 
@@ -703,7 +862,7 @@ class FileViewerApp:
         if self.auto_fit:
             self.scale = self._fit_scale()
             self._center_next_render = True
-        self._render_to_canvas()
+        self._render_all()
         self._update_page_nav()
         self._update_status()
 
@@ -725,12 +884,9 @@ class FileViewerApp:
 
     # ----- Bulk rename helpers -----
     def _suggest_rename_for_base(self, base_without_ext: str, ext: str) -> str | None:
-        # collect all ( ... ) contents anywhere; remove them for pattern detection
         paren_pat = re.compile(r"\(([^)]*)\)")
         notes = paren_pat.findall(base_without_ext)
         remainder = paren_pat.sub("", base_without_ext).strip()
-
-        # strictly numeric
         if re.fullmatch(r"\d+", remainder):
             new_base = "Map#" + remainder
         else:
@@ -741,13 +897,11 @@ class FileViewerApp:
             b = m.group(2)
             new_base = "Vol." + a + "-Pg." + b
         if notes:
-            joined = " ".join([n.strip() for n in notes if n.strip() != ""])
-            if joined != "":
-                new_base = new_base + " (" + joined + ")"
+            note = " " + "(" + " ".join([n.strip() for n in notes if n.strip() != ""]) + ")"
+            new_base = new_base + note
         return new_base + ext
 
     def scan_bulk_renames(self):
-        """Compute preview names per your rules and paint matches blue in the listbox."""
         self.rename_preview.clear()
         for i, p in enumerate(self.files):
             base = os.path.basename(p)
@@ -755,43 +909,18 @@ class FileViewerApp:
             suggestion = self._suggest_rename_for_base(root, ext)
             self.listbox.delete(i)
             self.listbox.insert(i, suggestion if suggestion else base)
-            if suggestion:
-                self.rename_preview[i] = suggestion
-                try:
-                    self.listbox.itemconfig(i, fg="blue")
-                except Exception:
-                    pass
-            else:
-                try:
-                    self.listbox.itemconfig(i, fg="black")
-                except Exception:
-                    pass
-        if self.current_index is not None and self.current_index < self.listbox.size():
-            self.listbox.selection_clear(0, tk.END)
-            self.listbox.selection_set(self.current_index)
-            self.listbox.activate(self.current_index)
-
-    def clear_bulk_rename_preview(self):
-        """Revert sidebar display to original basenames and clear rename preview state."""
-        for i, p in enumerate(self.files):
-            base = os.path.basename(p)
             try:
-                self.listbox.delete(i)
-                self.listbox.insert(i, base)
-                try:
-                    self.listbox.itemconfig(i, fg="black")
-                except Exception:
-                    pass
+                self.listbox.itemconfig(i, fg=("blue" if suggestion else "black"))
             except Exception:
                 pass
-        self.rename_preview.clear()
+            if suggestion:
+                self.rename_preview[i] = suggestion
         if self.current_index is not None and self.current_index < self.listbox.size():
             self.listbox.selection_clear(0, tk.END)
             self.listbox.selection_set(self.current_index)
             self.listbox.activate(self.current_index)
 
     def _unique_name_in_folder(self, folder: str, desired_name: str) -> str:
-        """Return a non-conflicting name (Append " (2)", " (3)", ... before the extension)."""
         name_root, ext = os.path.splitext(desired_name)
         candidate = desired_name
         n = 2
@@ -804,8 +933,7 @@ class FileViewerApp:
         if not self.rename_preview:
             messagebox.showinfo("Apply Renames", "Nothing to rename. Use Scan Renames first.")
             return
-        count = len(self.rename_preview)
-        proceed = messagebox.askyesno("Apply Renames", "Rename " + str(count) + " file(s) now? This cannot be undone.")
+        proceed = messagebox.askyesno("Apply Renames", "Rename " + str(len(self.rename_preview)) + " file(s) now?")
         if not proceed:
             return
         new_files = list(self.files)
@@ -844,156 +972,23 @@ class FileViewerApp:
             self.listbox.activate(self.current_index)
         messagebox.showinfo("Apply Renames", "Renaming complete.")
 
-    # ----- Inline manual rename -----
-    def _begin_inline_rename(self, event=None):
-        # If an editor is already open, ignore
-        if self._inline_editor is not None:
+    def clear_bulk_rename_preview(self):
+        for i, p in enumerate(self.files):
+            base = os.path.basename(p)
             try:
-                self._inline_editor.focus_set()
-            except Exception:
-                pass
-            return
-
-        # Determine index: from event (mouse) or current selection (F2/context)
-        idx = None
-        if event is not None and hasattr(event, "y"):
-            try:
-                idx = int(self.listbox.nearest(event.y))
-            except Exception:
-                idx = None
-        if idx is None:
-            sel = self.listbox.curselection()
-            if sel:
-                idx = int(sel[0])
-        if idx is None or idx < 0 or idx >= self.listbox.size():
-            self.root.bell()
-            return
-
-        # Ensure selection is on this item (and open it, to match your "select = open" behavior)
-        self.listbox.selection_clear(0, tk.END)
-        self.listbox.selection_set(idx)
-        self.listbox.activate(idx)
-        self._open_index(idx)
-
-        # Get on-screen bbox for the list item
-        bbox = self.listbox.bbox(idx)
-        if not bbox:
-            # If item not visible, make it visible
-            self.listbox.see(idx)
-            bbox = self.listbox.bbox(idx)
-        if not bbox:
-            self.root.bell()
-            return
-
-        x, y, w, h = bbox
-        current_label = self.listbox.get(idx)
-        # Use on-disk basename (not preview) when possible
-        try:
-            actual_base = os.path.basename(self.files[idx])
-        except Exception:
-            actual_base = current_label
-
-        # Create overlay Entry
-        e = ttk.Entry(self.listbox)
-        e.place(x=x, y=y, width=max(w, 80), height=h)
-        e.insert(0, actual_base)
-        e.focus_set()
-
-        # Select only name before extension, like Windows Explorer
-        dot = actual_base.rfind(".")
-        if dot > 0:
-            try:
-                e.selection_range(0, dot)
-            except Exception:
-                pass
-        else:
-            try:
-                e.selection_range(0, tk.END)
-            except Exception:
-                pass
-
-        self._inline_editor = e
-        self._inline_editor_index = idx
-
-        def commit():
-            self._commit_inline_rename()
-
-        def cancel(_evt=None):
-            self._cancel_inline_rename()
-
-        e.bind("<Return>", lambda _ev: commit())
-        e.bind("<KP_Enter>", lambda _ev: commit())
-        e.bind("<Escape>", cancel)
-        e.bind("<FocusOut>", lambda _ev: commit())
-
-    def _commit_inline_rename(self):
-        if self._inline_editor is None or self._inline_editor_index is None:
-            return
-        e = self._inline_editor
-        idx = self._inline_editor_index
-        new_name = e.get().strip()
-
-        # Clean up editor first (so focus change doesn't recurse)
-        try:
-            e.destroy()
-        except Exception:
-            pass
-        self._inline_editor = None
-        self._inline_editor_index = None
-
-        if new_name == "":
-            self.root.bell()
-            return
-
-        # Keep original extension; disallow changing it
-        try:
-            full_old = self.files[idx]
-            folder = os.path.dirname(full_old)
-            base_old = os.path.basename(full_old)
-            old_root, old_ext = os.path.splitext(base_old)
-            new_root, new_ext = os.path.splitext(new_name)
-            # Force original extension
-            dest_name = (new_root if new_root != "" else old_root) + old_ext
-            # Avoid conflicts
-            if os.path.exists(os.path.join(folder, dest_name)):
-                dest_name = self._unique_name_in_folder(folder, dest_name)
-            dst = os.path.join(folder, dest_name)
-            # If name actually changed, rename on disk
-            if dest_name != base_old:
+                self.listbox.delete(i)
+                self.listbox.insert(i, base)
                 try:
-                    os.rename(full_old, dst)
-                except Exception as ex:
-                    messagebox.showerror("Rename", "Could not rename:\n" + full_old + "\n→ " + dst + "\n" + str(ex))
-                    return
-                # update in-memory path list
-                self.files[idx] = dst
-                if self.current_index == idx:
-                    self.current_path = dst
-            # Update listbox label and clear any bulk preview override
-            self.listbox.delete(idx)
-            self.listbox.insert(idx, dest_name)
-            try:
-                self.listbox.itemconfig(idx, fg="black")
+                    self.listbox.itemconfig(i, fg="black")
+                except Exception:
+                    pass
             except Exception:
                 pass
-            if idx in self.rename_preview:
-                self.rename_preview.pop(idx, None)
-            # keep selection
+        self.rename_preview.clear()
+        if self.current_index is not None and self.current_index < self.listbox.size():
             self.listbox.selection_clear(0, tk.END)
-            self.listbox.selection_set(idx)
-            self.listbox.activate(idx)
-        except Exception as e2:
-            messagebox.showerror("Rename", "Unexpected error:\n" + str(e2))
-
-    def _cancel_inline_rename(self):
-        if self._inline_editor is None:
-            return
-        try:
-            self._inline_editor.destroy()
-        except Exception:
-            pass
-        self._inline_editor = None
-        self._inline_editor_index = None
+            self.listbox.selection_set(self.current_index)
+            self.listbox.activate(self.current_index)
 
     # ----- session & config (manual sessions) -----
     def _state_path(self) -> str:
@@ -1013,9 +1008,7 @@ class FileViewerApp:
         self._write_session(path)
 
     def save_session_as(self):
-        path = filedialog.asksaveasfilename(
-            title="Save Session As…", defaultextension=".json", filetypes=[("JSON", "*.json")]
-        )
+        path = filedialog.asksaveasfilename(title="Save Session As…", defaultextension=".json", filetypes=[("JSON", "*.json")])
         if not path:
             return
         self._write_session(path)
@@ -1035,9 +1028,7 @@ class FileViewerApp:
             messagebox.showerror("Save Session", "Could not save session:\n" + str(e))
 
     def load_session_from_file(self):
-        path = filedialog.askopenfilename(
-            title="Load Session…", filetypes=[("JSON", "*.json"), ("All files", "*.*")]
-        )
+        path = filedialog.askopenfilename(title="Load Session…", filetypes=[("JSON", "*.json"), ("All files", "*.*")])
         if not path:
             return
         try:
@@ -1090,8 +1081,12 @@ class FileViewerApp:
         self._update_status()
 
     def _on_close(self):
-        # No auto session save; config is still saved
         self._save_config()
+        try:
+            if self.popwin is not None:
+                self.popwin.destroy()
+        except Exception:
+            pass
         self.root.destroy()
 
     # ----- presets -----
@@ -1148,84 +1143,64 @@ class FileViewerApp:
 
         ttk.Button(top, text="Load", command=do_load).pack(padx=12, pady=(0, 12))
 
-    # ----- preferences -----
-    def show_preferences(self):
-        top = tk.Toplevel(self.root)
-        top.title("Preferences")
-        frm = ttk.Frame(top, padding=12)
-        frm.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(frm, text="Default open folder:").grid(row=0, column=0, sticky="w")
-        open_var = tk.StringVar(value=self.config.get("default_open_dir") or "")
-        open_entry = ttk.Entry(frm, textvariable=open_var, width=50)
-        open_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        def choose_open():
-            d = filedialog.askdirectory(title="Choose default open folder")
-            if d:
-                open_var.set(d)
-        ttk.Button(frm, text="Browse…", command=choose_open).grid(row=0, column=2, padx=(6, 0))
-
-        ttk.Label(frm, text="Default session file:").grid(row=1, column=0, sticky="w", pady=(8, 0))
-        sess_var = tk.StringVar(value=self.config.get("default_session_path") or "")
-        sess_entry = ttk.Entry(frm, textvariable=sess_var, width=50)
-        sess_entry.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(8, 0))
-        def choose_sess():
-            p = filedialog.asksaveasfilename(
-                title="Choose default session file",
-                defaultextension=".json",
-                filetypes=[("JSON", "*.json")]
-            )
-            if p:
-                sess_var.set(p)
-        ttk.Button(frm, text="Browse…", command=choose_sess).grid(row=1, column=2, padx=(6, 0), pady=(8, 0))
-
-        frm.columnconfigure(1, weight=1)
-
-        btns = ttk.Frame(frm)
-        btns.grid(row=2, column=0, columnspan=3, sticky="e", pady=(12, 0))
-        def do_ok():
-            self.config["default_open_dir"] = open_var.get().strip() or None
-            self.config["default_session_path"] = sess_var.get().strip() or None
-            self._save_config()
-            top.destroy()
-        def do_cancel():
-            top.destroy()
-        ttk.Button(btns, text="Cancel", command=do_cancel).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(btns, text="OK", command=do_ok).pack(side=tk.RIGHT)
-
-    # ----- shortcuts dialog -----
+    # ----- shortcuts -----
     def show_shortcuts(self):
-        shortcuts = get_shortcuts_text()
+        lines = [
+            "Ctrl+O — Open Folder",
+            "Ctrl+Shift+O — Add Files",
+            "Delete — Remove selected",
+            "Ctrl+S — Save session",
+            "Enter/Double-click — Open selected",
+            "Ctrl+E — Open externally",
+            "Ctrl+R — Show in folder",
+            "Mouse drag — Pan image",
+            "+ / - — Zoom in/out",
+            "F — Fit to window",
+            "F1 — Keyboard Shortcuts",
+        ]
+        txt = "\n".join(lines)
         top = tk.Toplevel(self.root)
         top.title("Keyboard Shortcuts")
-        top.transient(self.root)
-        top.grab_set()
         frm = ttk.Frame(top, padding=12)
         frm.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(frm, text="Keyboard Shortcuts", font=("TkDefaultFont", 12, "bold")).pack(anchor="w", pady=(0, 6))
-        txt = tk.Text(frm, width=48, height=12, wrap="word")
-        txt.pack(fill=tk.BOTH, expand=True)
-        txt.insert("1.0", shortcuts)
-        txt.configure(state="disabled")
+        t = tk.Text(frm, width=56, height=14, wrap="word")
+        t.pack(fill=tk.BOTH, expand=True)
+        t.insert("1.0", txt)
+        t.configure(state="disabled")
         ttk.Button(frm, text="Close", command=top.destroy).pack(anchor="e", pady=(8, 0))
 
+    # ----- pop-out mirror -----
+    def pop_out(self):
+        if self.popwin is not None:
+            try:
+                self.popwin.lift()
+                return
+            except Exception:
+                self.popwin = None
+                self.pop_canvas = None
+        self.popwin = tk.Toplevel(self.root)
+        self.popwin.title("Preview — Pop Out")
+        self.popwin.geometry("960x720")
+        self.popwin.minsize(640, 480)
+        wrap = ttk.Frame(self.popwin, padding=6)
+        wrap.pack(fill=tk.BOTH, expand=True)
+        self.pop_canvas = tk.Canvas(wrap, bg="#303030", highlightthickness=0)
+        self.pop_canvas.pack(fill=tk.BOTH, expand=True)
+        # Bind same mouse gestures for panning/zoom
+        self.pop_canvas.bind("<MouseWheel>", self._on_wheel)
+        self.pop_canvas.bind("<Button-4>", self._on_wheel_linux)
+        self.pop_canvas.bind("<ButtonPress-1>", lambda e: self._start_pan(self.pop_canvas, e))
+        self.pop_canvas.bind("<B1-Motion>", lambda e: self._do_pan(self.pop_canvas, e))
 
-# ---------- shortcuts text ----------
-def get_shortcuts_text() -> str:
-    lines = [
-        "Ctrl+O — Open Folder",
-        "Ctrl+Shift+O — Add Files",
-        "F2 — Rename",
-        "Delete — Remove selected",
-        "Ctrl+S — Save session",
-        "Enter/Double-click — Open selected",
-        "Ctrl+E — Open externally",
-        "Ctrl+R — Show in folder",
-        "+ / - — Zoom in/out",
-        "F — Fit to window",
-        "F1 — Keyboard Shortcuts",
-    ]
-    return "\n".join(lines)
+        def on_close():
+            self.popwin.destroy()
+            self.popwin = None
+            self.pop_canvas = None
+            self.pop_tk_image = None
+        self.popwin.protocol("WM_DELETE_WINDOW", on_close)
+
+        # initial draw
+        self._render_all()
 
 
 # ---------- main ----------
