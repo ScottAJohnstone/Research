@@ -179,6 +179,81 @@ class FileViewerApp:
         self.root.config(menu=menubar)
 
     def _build_layout(self):
+        """
+        Build and configure the entire main window layout for the file viewer application.
+
+        This method constructs the visual hierarchy and widget tree and assigns them to
+        instance attributes. It does not take any parameters other than self and does
+        not return a value; it configures the Tkinter geometry, widget options, and
+        command bindings that other methods rely on.
+
+        Layout overview
+        - Root grid: configures a single expandable cell (row 0, col 0) and a status bar
+            at row 1.
+        - Main split: a horizontal ttk.Panedwindow (self.pw) with two panes:
+            - LEFT pane (self.left_frame): contains a multi-column ttk.Treeview used as
+                the primary record list, a pair of labeled Entry widgets for "Documents" and
+                "Comments" (with placeholder text), and a row of action buttons + checkbox.
+            - RIGHT pane (self.right): contains toolbars, a preview area that can show an
+                image canvas or a text viewer, navigation and zoom controls, bulk-rename
+                tools, a "List of files" listbox, an (initially hidden) pager bar, and a
+                status label below the paned window.
+
+        Key widgets and configuration (created as instance attributes)
+        - self.pw: ttk.Panedwindow dividing left and right panes.
+        - LEFT pane:
+            - self.left_frame: container Frame for the left pane.
+            - self.research: ttk.Treeview with columns ("uuid", "name", "comments"),
+                configured headings and column widths, vertical scrollbar attached.
+            - Demo rows inserted into the treeview for example content.
+            - self.doc_var, self.com_var: tk.StringVar backing the two entry widgets.
+            - self.doc_entry, self.com_entry: ttk.Entry widgets placed inside
+                ttk.LabelFrame groups ("Documents", "Comments"). Placeholders are added via
+                self._add_placeholder.
+            - Actions row: a set of ttk.Button widgets ("Enter Record", "Edit Record",
+                "Delete Record", "Log to Files") and a ttk.Checkbutton ("Abutter").
+        - RIGHT pane:
+            - self.right: container Frame for the right pane.
+            - Top toolbar (Open Folder, Add File, Remove File, Pop Out) bound to methods:
+                self.open_folder, self.add_files, self.remove_selected, self.pop_out.
+            - Preview area (preview_border):
+                - self.canvas: tk.Canvas for image previews (dark background), image placed
+                    via self.image_id.
+                - self.text_frame: Frame containing self.text_widget (tk.Text, initially
+                    disabled) with vertical and horizontal scrollbars.
+            - Navigation buttons: Previous / Next bound to self.prev_file / self.next_file.
+            - Zoom controls: Fit W / Fit H bound to self.fit_width / self.fit_height;
+                Zoom + calls self._zoom(1.1); Help bound to self.show_shortcuts.
+            - Bulk-rename tools: Scan / Clear / Apply bound to
+                self.scan_bulk_renames, self.clear_bulk_rename_preview, self.apply_bulk_renames.
+            - File list: self.listbox (tk.Listbox) inside a ttk.LabelFrame with vertical
+                scrollbar.
+            - Pager controls (self.page_bar) are created but initially hidden; includes
+                page navigation widgets bound to self.page_prev, self.page_go, self.page_next.
+        - Status bar:
+            - self.status: ttk.Label placed below the panedwindow showing a short status
+                message (initially "Ready").
+
+        Geometry and behavior notes
+        - Grid weights and minsize values are set to make the Treeview, preview area,
+            and file list expand appropriately when the window is resized.
+        - Several interactive controls are wired to instance methods (open/add/remove,
+            navigation, zoom, bulk-rename). The preview supports both an image canvas and a
+            text viewer; which is shown or updated is managed elsewhere in the class.
+        - Placeholder text is added to the two entry widgets via a helper
+            self._add_placeholder; the text widget is initially read-only (state="disabled").
+        - The pager bar is prepared and packed but hidden (grid_forget()) until needed.
+
+        Side effects / instance attributes created
+        - Many attributes are set on self (pw, left_frame, research, doc_var, com_var,
+            doc_entry, com_entry, right, canvas, image_id, text_frame, text_widget,
+            listbox, page_bar, page_prev_btn, page_entry, page_go_btn, page_label,
+            page_next_btn, status, and several button widgets). Other parts of the class
+            assume these exist after this method runs.
+
+        Return
+        - None (configures the GUI in-place).
+        """
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
 
@@ -239,14 +314,14 @@ class FileViewerApp:
         actions.grid(row=3, column=0, columnspan=2, sticky="ew")
         for i in range(1, 6):
             actions.columnconfigure(i, weight=1)
-        ttk.Button(actions, text="Enter Record").grid(row=0, column=0, padx=4, pady=6, sticky="ew")
-        ttk.Button(actions, text="Edit Record").grid(row=0, column=1, padx=4, pady=6, sticky="ew")
-        ttk.Button(actions, text="Delete Record").grid(row=0, column=2, padx=4, pady=6, sticky="ew")
-        ttk.Button(actions, text="Log to Files").grid(row=0, column=3, padx=4, pady=6, sticky="ew")
-        ttk.Checkbutton(actions, text="A Butter").grid(row=0, column=4, padx=4, pady=6, sticky="e")
+        ttk.Button(actions, text="Enter Record").grid(row=0, column=0, sticky="ew")
+        ttk.Button(actions, text="Edit Record").grid(row=0, column=1, sticky="ew")
+        ttk.Button(actions, text="Delete Record").grid(row=0, column=2, sticky="ew")
+        ttk.Button(actions, text="Log to Files").grid(row=0, column=3, sticky="ew")
+        ttk.Checkbutton(actions, text="Abutter").grid(row=0, column=4, sticky="e")
 
         # =============== RIGHT =================
-        self.right = ttk.Frame(self.pw, padding=(6, 8, 8, 8))
+        self.right = ttk.Frame(self.pw, padding=(8, 8, 6, 8))
         self.right.columnconfigure(0, weight=1, minsize=560)
         self.right.rowconfigure(1, weight=1)
         self.right.rowconfigure(5, weight=1)
@@ -257,23 +332,23 @@ class FileViewerApp:
         topbar.grid(row=0, column=0, sticky="ew")
         for i in range(4):
             topbar.columnconfigure(i, weight=1)
-        ttk.Button(topbar, text="Open Folder", command=self.open_folder).grid(row=0, column=0, padx=4, pady=(0, 6), sticky="ew")
-        ttk.Button(topbar, text="Add File", command=self.add_files).grid(row=0, column=1, padx=4, pady=(0, 6), sticky="ew")
-        ttk.Button(topbar, text="Remove File", command=self.remove_selected).grid(row=0, column=2, padx=4, pady=(0, 6), sticky="ew")
-        ttk.Button(topbar, text="Pop Out", command=self.pop_out).grid(row=0, column=3, padx=4, pady=(0, 6), sticky="ew")
+        ttk.Button(topbar, text="Open Folder", command=self.open_folder).grid(row=0, column=0, sticky="ew")
+        ttk.Button(topbar, text="Add File", command=self.add_files).grid(row=0, column=1, sticky="ew")
+        ttk.Button(topbar, text="Remove File", command=self.remove_selected).grid(row=0, column=2, sticky="ew")
+        ttk.Button(topbar, text="Pop Out", command=self.pop_out).grid(row=0, column=3, sticky="ew")
 
         # Preview window (Canvas/Text) — larger area
-        preview_border = ttk.Frame(self.right, relief="groove", borderwidth=2)
+        preview_border = ttk.Frame(self.right, relief="groove", borderwidth=2, height=60)
         preview_border.grid(row=1, column=0, sticky="nsew")
         preview_border.rowconfigure(0, weight=1)
-        preview_border.columnconfigure(0, weight=1)
+        preview_border.columnconfigure(0, weight=1,)
 
-        self.canvas = tk.Canvas(preview_border, bg="#303030", highlightthickness=0)
+        self.canvas = tk.Canvas(preview_border, bg="#303030", highlightthickness=0,height=200)
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.image_id = self.canvas.create_image(0, 0, anchor="nw")
 
         # Text viewer
-        self.text_frame = ttk.Frame(preview_border)
+        self.text_frame = ttk.Frame(preview_border,height=200)
         self.text_frame.rowconfigure(0, weight=1)
         self.text_frame.columnconfigure(0, weight=1)
         self.text_widget = tk.Text(self.text_frame, wrap="none", font=("Consolas", 11))
@@ -287,38 +362,38 @@ class FileViewerApp:
 
         # Row: Prev/Next (full width)
         nav_row = ttk.Frame(self.right)
-        nav_row.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        nav_row.grid(row=2, column=0, sticky="ew")
         nav_row.columnconfigure(0, weight=1)
         nav_row.columnconfigure(1, weight=1)
-        ttk.Button(nav_row, text="Previous File", command=self.prev_file).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(nav_row, text="Next File", command=self.next_file).grid(row=0, column=1, padx=4, sticky="ew")
+        ttk.Button(nav_row, text="Previous File", command=self.prev_file).grid(row=0, column=0, sticky="ew")
+        ttk.Button(nav_row, text="Next File", command=self.next_file).grid(row=0, column=1, sticky="ew")
 
         # Row: Fit W | Fit H | Zoom + | Help
         zoom_row = ttk.Frame(self.right)
-        zoom_row.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        zoom_row.grid(row=3, column=0, sticky="ew")
         for i in range(4):
             zoom_row.columnconfigure(i, weight=1)
-        ttk.Button(zoom_row, text="Fit W", command=self.fit_width).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(zoom_row, text="Fit H", command=self.fit_height).grid(row=0, column=1, padx=4, sticky="ew")
-        ttk.Button(zoom_row, text="Zoom +", command=lambda: self._zoom(1.1)).grid(row=0, column=2, padx=4, sticky="ew")
-        ttk.Button(zoom_row, text="Help", command=self.show_shortcuts).grid(row=0, column=3, padx=4, sticky="ew")
+        ttk.Button(zoom_row, text="Fit W", command=self.fit_width).grid(row=0, column=0, sticky="nsew")
+        ttk.Button(zoom_row, text="Fit H", command=self.fit_height).grid(row=0, column=1, sticky="nsew")
+        ttk.Button(zoom_row, text="Zoom +", command=lambda: self._zoom(1.1)).grid(row=0, column=2, sticky="nsew")
+        ttk.Button(zoom_row, text="Help", command=self.show_shortcuts).grid(row=0, column=3, sticky="nsew")
 
         # Row: Scan | Clear | Apply
         tools_row = ttk.Frame(self.right)
-        tools_row.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        tools_row.grid(row=4, column=0, sticky="ew")
         for i in range(3):
             tools_row.columnconfigure(i, weight=1)
-        ttk.Button(tools_row, text="Scan", command=self.scan_bulk_renames).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(tools_row, text="Clear", command=self.clear_bulk_rename_preview).grid(row=0, column=1, padx=4, sticky="ew")
-        ttk.Button(tools_row, text="Apply", command=self.apply_bulk_renames).grid(row=0, column=2, padx=4, sticky="ew")
+        ttk.Button(tools_row, text="Scan", command=self.scan_bulk_renames).grid(row=0, column=0, sticky="nsew")
+        ttk.Button(tools_row, text="Clear", command=self.clear_bulk_rename_preview).grid(row=0, column=1, sticky="nsew")
+        ttk.Button(tools_row, text="Apply", command=self.apply_bulk_renames).grid(row=0, column=2, sticky="nsew")
 
         # List of files
-        files_box = ttk.LabelFrame(self.right, text="List of files")
-        files_box.grid(row=5, column=0, sticky="nsew", pady=(8, 0))
+        files_box = ttk.LabelFrame(self.right, text="List of files",height=5)
+        files_box.grid(row=5, column=0, sticky="sew")
         files_box.rowconfigure(0, weight=1)
         files_box.columnconfigure(0, weight=1)
 
-        self.listbox = tk.Listbox(files_box, activestyle="dotbox")
+        self.listbox = tk.Listbox(files_box, activestyle="dotbox",)
         self.listbox.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
         sb = ttk.Scrollbar(files_box, orient="vertical", command=self.listbox.yview)
         sb.grid(row=0, column=1, sticky="ns", pady=6)

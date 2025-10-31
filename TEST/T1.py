@@ -9,17 +9,16 @@ from PIL import Image, ImageTk
 from PIL.Image import Resampling
 
 """
-Image/PDF/Text File Viewer (stable, with pop-out mirror and placeholders)
+Image/PDF/Text File Viewer
 
-- No f-strings (uses concatenation) to avoid parser issues you saw earlier
+- No f-strings (uses concatenation)
 - Fit-to-Window, pan (mouse drag), zoom (+/- or wheel)
-- Sessions are MANUAL ONLY (Save/Load via menu). Config (preferences/presets) persists
-- Presets menu (save/load the current file list)
-- Multi-page pager (PDF & multi-frame TIFF)
+- Manual sessions; config persists (presets, defaults)
+- Multi-page pager (PDF & multi-frame TIFF), shown as rounded chip bottom-center over preview
 - Text viewer for .txt/.md/.csv/.log/.res
-- Pop Out window mirrors the main preview; shortcuts act on both, panning is kept in sync
-- Left inputs use ghost placeholders that disappear on focus and return if empty
-- Resizable layout; right preview area a bit larger by default; min-widths to keep things visible
+- Pop Out window mirrors the main preview; panning kept in sync
+- Left inputs use ghost placeholders
+- Bold, high-visibility splitters on both outer (left|right) and inner (top|bottom)
 - Bulk Rename (preview + apply) following your rules
 """
 
@@ -71,8 +70,9 @@ class FileViewerApp:
     def __init__(self, root, start_dir: str | None = None):
         self.root = root
         self.root.title("File Viewer")
-        self.root.geometry("1480x940")   # a bit larger to comfortably fit everything
+        self.root.geometry("1480x940")
         self.root.minsize(1200, 780)
+        self.root.configure()
 
         # ttk padding tweaks (keep system colors)
         try:
@@ -93,11 +93,11 @@ class FileViewerApp:
         # image/pdf render state
         self.base_image = None         # type: Image.Image | None
         self.tk_image = None           # type: ImageTk.PhotoImage | None
-        self.scale = 1.0               # current scale applied to base_image
+        self.scale = 1.0
         self.min_scale = 0.1
         self.max_scale = 8.0
-        self.auto_fit = True           # if True, resize triggers re-fit
-        self._center_next_render = True  # center view on next render
+        self.auto_fit = True
+        self._center_next_render = True
 
         # pop-out window mirror
         self.popwin = None
@@ -112,13 +112,13 @@ class FileViewerApp:
 
         # config (preferences + presets)
         self.config = {
-            "default_open_dir": None,          # str | None
-            "default_session_path": None,      # str | None
-            "presets": {}                      # name -> list[str]
+            "default_open_dir": None,
+            "default_session_path": None,
+            "presets": {}
         }
 
         # rename preview state
-        self.rename_preview = {}   # index -> new_basename (with extension preserved)
+        self.rename_preview = {}
 
         # ui
         self._build_menu()
@@ -133,7 +133,7 @@ class FileViewerApp:
             self.load_directory(self.current_dir)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # set initial sash (~45% left, 55% right — larger preview)
+        # set initial sashes
         self.root.after(60, self._init_panes)
 
     # ----- UI -----
@@ -182,17 +182,23 @@ class FileViewerApp:
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
 
-        # Paned window: LEFT (tree + inputs) | RIGHT (preview + controls)
-        self.pw = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
-        self.pw.grid(row=0, column=0, sticky="nsew")
+        # Outer frame that provides window padding
+        outer = ttk.Frame(self.root, padding=12)
+        outer.grid(row=0, column=0, sticky="nsew")
+        outer.rowconfigure(0, weight=1)
+        outer.columnconfigure(0, weight=1)
 
-        # =============== LEFT =================
+        # OUTER LEFT | RIGHT (bold sash)
+        self.pw = tk.PanedWindow(self.root, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
+        self.pw.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
+
+        # LEFT
         self.left_frame = ttk.Frame(self.pw, padding=(8, 8, 6, 8))
         self.left_frame.columnconfigure(0, weight=1, minsize=560)
         self.left_frame.rowconfigure(1, weight=1)
-        self.pw.add(self.left_frame, weight=3)
+        self.pw.add(self.left_frame, minsize=560, stretch="always")
 
-        # Treeview (no top label per request)
+        # Treeview
         self.research = ttk.Treeview(
             self.left_frame,
             columns=("uuid", "name", "comments"),
@@ -210,11 +216,9 @@ class FileViewerApp:
         r_sb.grid(row=1, column=1, sticky="ns", pady=(0, 8))
         self.research.configure(yscrollcommand=r_sb.set)
 
-        # demo rows
         for i in range(1, 9):
             self.research.insert("", "end", values=("UUID-" + str(i), "Document " + str(i), "Example note"))
 
-        # Two labeled text boxes with ghost placeholders
         sub = ttk.Frame(self.left_frame)
         sub.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         sub.columnconfigure(0, weight=1, minsize=260)
@@ -234,46 +238,61 @@ class FileViewerApp:
         self._add_placeholder(self.doc_entry, "Documents")
         self._add_placeholder(self.com_entry, "Comments")
 
-        # Bottom row of buttons + checkbox (placeholders)
         actions = ttk.Frame(self.left_frame)
         actions.grid(row=3, column=0, columnspan=2, sticky="ew")
         for i in range(1, 6):
             actions.columnconfigure(i, weight=1)
-        ttk.Button(actions, text="Enter Record").grid(row=0, column=0, padx=4, pady=6, sticky="ew")
-        ttk.Button(actions, text="Edit Record").grid(row=0, column=1, padx=4, pady=6, sticky="ew")
-        ttk.Button(actions, text="Delete Record").grid(row=0, column=2, padx=4, pady=6, sticky="ew")
-        ttk.Button(actions, text="Log to Files").grid(row=0, column=3, padx=4, pady=6, sticky="ew")
-        ttk.Checkbutton(actions, text="A Butter").grid(row=0, column=4, padx=4, pady=6, sticky="e")
+        ttk.Button(actions, text="Enter Record").grid(row=0, column=0, sticky="ew")
+        ttk.Button(actions, text="Edit Record").grid(row=0, column=1, sticky="ew")
+        ttk.Button(actions, text="Delete Record").grid(row=0, column=2, sticky="ew")
+        ttk.Button(actions, text="Log to Files").grid(row=0, column=3, sticky="ew")
+        ttk.Checkbutton(actions, text="Abutter").grid(row=0, column=4, sticky="e")
 
-        # =============== RIGHT =================
-        self.right = ttk.Frame(self.pw, padding=(6, 8, 8, 8))
+        # RIGHT
+        self.right = ttk.Frame(self.pw, padding=(8, 8, 6, 8))
         self.right.columnconfigure(0, weight=1, minsize=560)
-        self.right.rowconfigure(1, weight=1)
-        self.right.rowconfigure(5, weight=1)
-        self.pw.add(self.right, weight=4)
+        self.right.rowconfigure(0, weight=1)
+        self.pw.add(self.right, minsize=560, stretch="always")
 
-        # Top buttons row
-        topbar = ttk.Frame(self.right)
-        topbar.grid(row=0, column=0, sticky="ew")
+        # INNER TOP | BOTTOM (bold sash)
+        self.right_pw = tk.PanedWindow(self.right, orient=tk.VERTICAL, sashrelief=tk.RAISED)
+        self.right_pw.grid(row=0, column=0, sticky="nsew")
+
+        # Top pane
+        self.right_top = ttk.Frame(self.right_pw)
+        self.right_top.columnconfigure(0, weight=1)
+        self.right_top.rowconfigure(1, weight=1)  # preview expands
+
+        # Bottom pane
+        self.right_bottom = ttk.Frame(self.right_pw)
+        self.right_bottom.columnconfigure(0, weight=1)
+        self.right_bottom.rowconfigure(0, weight=1)
+
+        self.right_pw.add(self.right_top, minsize=200, stretch="always")
+        self.right_pw.add(self.right_bottom, minsize=120, stretch="always")
+
+        # ---- Top controls live in self.right_top ----
+        topbar = ttk.Frame(self.right_top, padding=(0, 0))
+        topbar.grid(row=0, column=0, sticky="ew", pady=(0, 2))
         for i in range(4):
             topbar.columnconfigure(i, weight=1)
-        ttk.Button(topbar, text="Open Folder", command=self.open_folder).grid(row=0, column=0, padx=4, pady=(0, 6), sticky="ew")
-        ttk.Button(topbar, text="Add File", command=self.add_files).grid(row=0, column=1, padx=4, pady=(0, 6), sticky="ew")
-        ttk.Button(topbar, text="Remove File", command=self.remove_selected).grid(row=0, column=2, padx=4, pady=(0, 6), sticky="ew")
-        ttk.Button(topbar, text="Pop Out", command=self.pop_out).grid(row=0, column=3, padx=4, pady=(0, 6), sticky="ew")
+        # reduce vertical padding on the buttons via padding=(hor, vert)
+        ttk.Button(topbar, text="Open Folder", command=self.open_folder, padding=(6, 2)).grid(row=0, column=0, sticky="ew")
+        ttk.Button(topbar, text="Add File", command=self.add_files, padding=(6, 2)).grid(row=0, column=1, sticky="ew")
+        ttk.Button(topbar, text="Remove File", command=self.remove_selected, padding=(6, 2)).grid(row=0, column=2, sticky="ew")
+        ttk.Button(topbar, text="Pop Out", command=self.pop_out, padding=(6, 2)).grid(row=0, column=3, sticky="ew")
 
-        # Preview window (Canvas/Text) — larger area
-        preview_border = ttk.Frame(self.right, relief="groove", borderwidth=2)
-        preview_border.grid(row=1, column=0, sticky="nsew")
-        preview_border.rowconfigure(0, weight=1)
-        preview_border.columnconfigure(0, weight=1)
+        # Preview window (Canvas/Text)
+        self.preview_border = ttk.Frame(self.right_top, relief="solid", borderwidth=1, height=60)
+        self.preview_border.grid(row=1, column=0, sticky="nsew")
+        self.preview_border.rowconfigure(0, weight=1)
+        self.preview_border.columnconfigure(0, weight=1)
 
-        self.canvas = tk.Canvas(preview_border, bg="#303030", highlightthickness=0)
+        self.canvas = tk.Canvas(self.preview_border, height=200)
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.image_id = self.canvas.create_image(0, 0, anchor="nw")
 
-        # Text viewer
-        self.text_frame = ttk.Frame(preview_border)
+        self.text_frame = ttk.Frame(self.preview_border, height=200)
         self.text_frame.rowconfigure(0, weight=1)
         self.text_frame.columnconfigure(0, weight=1)
         self.text_widget = tk.Text(self.text_frame, wrap="none", font=("Consolas", 11))
@@ -285,74 +304,162 @@ class FileViewerApp:
         thsb.grid(row=1, column=0, sticky="ew")
         self.text_widget.configure(yscrollcommand=tvsb.set, xscrollcommand=thsb.set)
 
-        # Row: Prev/Next (full width)
-        nav_row = ttk.Frame(self.right)
-        nav_row.grid(row=2, column=0, sticky="ew", pady=(6, 0))
-        nav_row.columnconfigure(0, weight=1)
-        nav_row.columnconfigure(1, weight=1)
-        ttk.Button(nav_row, text="Previous File", command=self.prev_file).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(nav_row, text="Next File", command=self.next_file).grid(row=0, column=1, padx=4, sticky="ew")
+        tool_frame = ttk.Frame(self.right_top, padding=(0, 0))
+        tool_frame.grid(row=2, column=0, sticky="ew", pady=(6, 0), ipady=6)
 
-        # Row: Fit W | Fit H | Zoom + | Help
-        zoom_row = ttk.Frame(self.right)
-        zoom_row.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        # prepare columns (4 to accommodate nav / zoom / help rows)
         for i in range(4):
-            zoom_row.columnconfigure(i, weight=1)
-        ttk.Button(zoom_row, text="Fit W", command=self.fit_width).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(zoom_row, text="Fit H", command=self.fit_height).grid(row=0, column=1, padx=4, sticky="ew")
-        ttk.Button(zoom_row, text="Zoom +", command=lambda: self._zoom(1.1)).grid(row=0, column=2, padx=4, sticky="ew")
-        ttk.Button(zoom_row, text="Help", command=self.show_shortcuts).grid(row=0, column=3, padx=4, sticky="ew")
+            tool_frame.columnconfigure(i, weight=1)
 
-        # Row: Scan | Clear | Apply
-        tools_row = ttk.Frame(self.right)
-        tools_row.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        # Row 0: navigation (no vertical padding, fill horizontally)
+        ttk.Button(tool_frame, text="Previous File", command=self.prev_file, padding=(6, 0))\
+            .grid(row=0, column=0, sticky="nsew", padx=(0, 0), pady=0, columnspan=2)
+        ttk.Button(tool_frame, text="Next File", command=self.next_file, padding=(6, 0))\
+            .grid(row=0, column=2, sticky="nsew", padx=(0, 0), pady=0, columnspan=2)
+
+        # Row 1: zoom / fit / help (no vertical padding, fill horizontally)
+        ttk.Button(tool_frame, text="Fit W", command=self.fit_width, padding=(6, 0))\
+            .grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        ttk.Button(tool_frame, text="Fit H", command=self.fit_height, padding=(6, 0))\
+            .grid(row=1, column=1, sticky="nsew", padx=0, pady=0)
+        ttk.Button(tool_frame, text="Zoom +", command=lambda: self._zoom(1.1), padding=(6, 0))\
+            .grid(row=1, column=2, sticky="nsew", padx=0, pady=0)
+        ttk.Button(tool_frame, text="Help", command=self.show_shortcuts, padding=(6, 0))\
+            .grid(row=1, column=3, sticky="nsew", padx=0, pady=0)
+
+        # Row 2: bulk rename tools (fill full width)
+        row2 = ttk.Frame(tool_frame)
+        row2.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=0, pady=0)
         for i in range(3):
-            tools_row.columnconfigure(i, weight=1)
-        ttk.Button(tools_row, text="Scan", command=self.scan_bulk_renames).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(tools_row, text="Clear", command=self.clear_bulk_rename_preview).grid(row=0, column=1, padx=4, sticky="ew")
-        ttk.Button(tools_row, text="Apply", command=self.apply_bulk_renames).grid(row=0, column=2, padx=4, sticky="ew")
+            row2.columnconfigure(i, weight=1)
+        ttk.Button(row2, text="Scan", command=self.scan_bulk_renames, padding=(6, 0))\
+            .grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        ttk.Button(row2, text="Clear", command=self.clear_bulk_rename_preview, padding=(6, 0))\
+            .grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
+        ttk.Button(row2, text="Apply", command=self.apply_bulk_renames, padding=(6, 0))\
+            .grid(row=0, column=2, sticky="nsew", padx=0, pady=0)
 
-        # List of files
-        files_box = ttk.LabelFrame(self.right, text="List of files")
-        files_box.grid(row=5, column=0, sticky="nsew", pady=(8, 0))
+        # --- Floating pager overlay (rounded chip) ---
+        self._build_pager_overlay()
+        # Reposition overlay when preview resizes
+        self.preview_border.bind("<Configure>", lambda e: self._position_pager())
+
+        # ---- Bottom files list in RIGHT BOTTOM ----
+        files_box = ttk.LabelFrame(self.right_bottom, text="List of files", height=5)
+        files_box.grid(row=0, column=0, sticky="nsew",pady=(6,0))
         files_box.rowconfigure(0, weight=1)
         files_box.columnconfigure(0, weight=1)
 
         self.listbox = tk.Listbox(files_box, activestyle="dotbox")
         self.listbox.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
-        sb = ttk.Scrollbar(files_box, orient="vertical", command=self.listbox.yview)
+        sb = ttk.Scrollbar(files_box, orient="vertical", command=self.listbox.yview,style="")
         sb.grid(row=0, column=1, sticky="ns", pady=6)
         self.listbox.configure(yscrollcommand=sb.set)
 
-        # Pager (hidden until needed)
-        self.page_bar = ttk.Frame(self.right)
-        self.page_bar.grid_forget()
+
+        # Status bar (left bar per your layout)
+        self.status = ttk.Label(self.left_frame, text="Ready", anchor="w", padding=(8, 4))
+        self.status.grid(row=10, column=0, sticky="ew")
+
+    # ----- pager chip helpers -----
+    def _build_pager_overlay(self):
+        # Canvas that draws rounded bg + shadow, with a ttk frame on top
+        self.page_overlay = tk.Canvas(self.preview_border, highlightthickness=0, bd=0)
+        self.page_overlay_visible = False  # track visibility
+
+        # Inner frame that holds the actual controls
+        self.page_bar = ttk.Frame(self.page_overlay)
+
+        # Controls
         self.page_prev_btn = ttk.Button(self.page_bar, text="◀ Prev", command=self.page_prev, width=8)
         self.page_entry_var = tk.StringVar(value="1")
         self.page_entry = ttk.Entry(self.page_bar, width=6, textvariable=self.page_entry_var)
         self.page_go_btn = ttk.Button(self.page_bar, text="Go", command=self.page_go, width=4)
         self.page_label = ttk.Label(self.page_bar, text="/ 1")
         self.page_next_btn = ttk.Button(self.page_bar, text="Next ▶", command=self.page_next, width=8)
-        self.page_prev_btn.pack(side=tk.LEFT)
-        ttk.Label(self.page_bar, text=" Page ").pack(side=tk.LEFT)
-        self.page_entry.pack(side=tk.LEFT)
-        self.page_label.pack(side=tk.LEFT, padx=(6, 6))
-        self.page_go_btn.pack(side=tk.LEFT)
-        self.page_next_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        # Status bar
-        self.status = ttk.Label(self.root, text="Ready", anchor="w", padding=(8, 4))
-        self.status.grid(row=1, column=0, sticky="ew")
+        # Layout inside the chip
+        self.page_prev_btn.grid(row=0, column=0, padx=(6, 4))
+        ttk.Label(self.page_bar, text="Page").grid(row=0, column=1, padx=(0, 4))
+        self.page_entry.grid(row=0, column=2, padx=(0, 4))
+        self.page_label.grid(row=0, column=3, padx=(4, 8))
+        self.page_go_btn.grid(row=0, column=4, padx=(0, 8))
+        self.page_next_btn.grid(row=0, column=5, padx=(0, 6))
+
+        # Put the frame onto the canvas
+        self._pager_window_id = self.page_overlay.create_window(0, 0, window=self.page_bar, anchor="nw")
+        #self.page_overlay.configure(bg=self._chip_bg_color())
+        # Raise the widget (Canvas) itself using Tk call (avoids Canvas tag_raise signature)
+        self.page_overlay.tk.call('raise', self.page_overlay._w)
+
+    def _chip_bg_color(self):
+        return "#303030"
+        #return "#f5f6f8"
+
+    def _chip_border_color(self):
+        return "#303030"
+
+    def _position_pager(self):
+        """Size the chip to its contents, draw rounded bg + shadow, and place at bottom-center."""
+        if not hasattr(self, "page_overlay"):
+            return
+
+        # Measure contents
+        self.page_bar.update_idletasks()
+        inner_w = self.page_bar.winfo_reqwidth()
+        inner_h = self.page_bar.winfo_reqheight()
+
+        pad_x = 12  # horizontal padding inside rounded bg
+        pad_y = 6   # vertical padding inside rounded bg
+        radius = 10 # corner radius
+
+        w = inner_w + pad_x * 2
+        h = inner_h + pad_y * 2
+
+        # Resize canvas to fit rounded rect + content
+        self.page_overlay.configure(width=w, height=h)
+        self.page_overlay.delete("chip")
+
+        # Subtle shadow
+        # shadow_offset = 2
+        # self._draw_rounded_rect(self.page_overlay, 1 + shadow_offset, 1 + shadow_offset,
+        #                         w - 1 + shadow_offset, h - 1 + shadow_offset, radius,
+        #                         fill="#e2e3e7", outline="", tags=("chip",))
+
+        # Main rounded rectangle
+        self._draw_rounded_rect(self.page_overlay, 1, 1, w - 1, h - 1, radius,
+                                fill=self._chip_bg_color(), outline=self._chip_border_color(), tags=("chip",))
+
+        # Center the inner frame within the canvas
+        self.page_overlay.coords(self._pager_window_id, pad_x, pad_y)
+
+        # Place at bottom-center of the preview, above content
+        self.page_overlay.place(relx=0.5, rely=1.0, anchor="s", y=-10)
+        # Raise the widget via Tk call
+        self.page_overlay.tk.call('raise', self.page_overlay._w)
+
+    def _draw_rounded_rect(self, cvs, x1, y1, x2, y2, r, **kwargs):
+        """Draw a rounded rectangle on a Canvas."""
+        r = max(0, min(r, int(min((x2 - x1), (y2 - y1)) / 2)))
+        cvs.create_arc(x1, y1, x1 + 2 * r, y1 + 2 * r, start=90, extent=90, style="pieslice", **kwargs)
+        cvs.create_arc(x2 - 2 * r, y1, x2, y1 + 2 * r, start=0, extent=90, style="pieslice", **kwargs)
+        cvs.create_arc(x1, y2 - 2 * r, x1 + 2 * r, y2, start=180, extent=90, style="pieslice", **kwargs)
+        cvs.create_arc(x2 - 2 * r, y2 - 2 * r, x2, y2, start=270, extent=90, style="pieslice", **kwargs)
+        cvs.create_rectangle(x1 + r, y1, x2 - r, y2, **kwargs)
+        cvs.create_rectangle(x1, y1 + r, x2, y2 - r, **kwargs)
 
     def _init_panes(self):
+        # outer left|right split
         try:
-            self.pw.pane(self.left_frame, minsize=560)
-            self.pw.pane(self.right, minsize=560)
+            total = self.pw.winfo_width() or self.root.winfo_width() or 1
+            self.pw.sash_place(0, int(total * 0.45), 1)  # ~45% left / 55% right
         except Exception:
             pass
+
+        # inner top|bottom split
         try:
-            total = self.pw.winfo_width() or self.root.winfo_width()
-            self.pw.sashpos(0, int(total * 0.45))  # bigger preview (right ~55%)
+            rh = self.right_pw.winfo_height() or self.right.winfo_height() or 1
+            self.right_pw.sash_place(0, 1, int(rh * 0.70))  # ~70% top / 30% bottom
         except Exception:
             pass
 
@@ -362,8 +469,8 @@ class FileViewerApp:
         self.root.bind_all("<Control-Shift-o>", lambda e: self.add_files())
         self.root.bind_all("<Delete>", lambda e: self.remove_selected())
         self.root.bind_all("<Control-s>", lambda e: self.save_session())
-        self.root.bind_all("<Left>", lambda e: self.prev_file())
-        self.root.bind_all("<Right>", lambda e: self.next_file())
+        self.root.bind_all("<Up>", lambda e: self.prev_file())
+        self.root.bind_all("<Down>", lambda e: self.next_file())
         self.root.bind_all("<Key-plus>", lambda e: self._zoom(1.1))
         self.root.bind_all("<Key-equal>", lambda e: self._zoom(1.1))
         self.root.bind_all("<Key-minus>", lambda e: self._zoom(1/1.1))
@@ -425,10 +532,23 @@ class FileViewerApp:
             self._ctx.grab_release()
 
     def _set_page_nav_visible(self, visible: bool):
+        # Control the floating pager chip visibility
         if visible:
-            self.page_bar.grid(row=2, column=0, sticky="w", padx=8, pady=(6, 0))
+            if not self.page_overlay_visible:
+                self.page_overlay_visible = True
+                self._position_pager()
+                self.page_overlay.place(relx=0.5, rely=1.0, anchor="s", y=-10)
+                # Raise widget via direct Tk call (avoid Canvas tag_raise)
+                self.page_overlay.tk.call('raise', self.page_overlay._w)
+            else:
+                self._position_pager()
         else:
-            self.page_bar.grid_forget()
+            if self.page_overlay_visible:
+                self.page_overlay_visible = False
+                try:
+                    self.page_overlay.place_forget()
+                except Exception:
+                    pass
 
     def _update_status(self):
         name = os.path.basename(self.current_path) if self.current_path else "—"
@@ -523,6 +643,16 @@ class FileViewerApp:
         if idx < 0 or idx >= len(self.files):
             return
         self.current_index = idx
+
+        # reflect selection in the files list
+        try:
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(idx)
+            self.listbox.activate(idx)
+            self.listbox.see(idx)  # ensure it's visible
+        except Exception:
+            pass
+
         self.open_path(self.files[idx])
 
     def open_selected(self):
@@ -564,6 +694,7 @@ class FileViewerApp:
         self.tk_image = None
         self.scale = 1.0
         self.auto_fit = True
+        I = 0  # dummy local to avoid accidental f-strings; keeps style consistent
         self._center_next_render = True
         self.pdf_doc = None
         self.pdf_page_index = 0
@@ -615,7 +746,8 @@ class FileViewerApp:
             return
 
         if self.mode == 'image':
-            self.fit_to_window()
+            # default zoom to Fit Width
+            self.fit_width()
         self._update_status()
         self._update_page_nav()
 
@@ -676,9 +808,7 @@ class FileViewerApp:
 
     # ----- canvas render & zoom & pan -----
     def _render_all(self):
-        # render main
         self._render_to_canvas()
-        # render popup mirror if present
         if self.pop_canvas is not None and self.base_image is not None:
             img = self.base_image
             w = max(1, int(img.width * self.scale))
@@ -688,7 +818,6 @@ class FileViewerApp:
             self.pop_canvas.delete("all")
             self.pop_canvas.create_image(0, 0, anchor="nw", image=self.pop_tk_image)
             self.pop_canvas.config(scrollregion=(0, 0, scaled.width, scaled.height))
-            # center once when opening
             try:
                 cv_w = max(1, self.pop_canvas.winfo_width())
                 cv_h = max(1, self.pop_canvas.winfo_height())
@@ -754,7 +883,6 @@ class FileViewerApp:
         if self.mode != 'image' or not self.base_image:
             return
         canvas.scan_dragto(event.x, event.y, gain=1)
-        # mirror pan positions
         try:
             if canvas is self.canvas and self.pop_canvas is not None:
                 self.pop_canvas.xview_moveto(self.canvas.xview()[0])
@@ -1186,7 +1314,6 @@ class FileViewerApp:
         wrap.pack(fill=tk.BOTH, expand=True)
         self.pop_canvas = tk.Canvas(wrap, bg="#303030", highlightthickness=0)
         self.pop_canvas.pack(fill=tk.BOTH, expand=True)
-        # Bind same mouse gestures for panning/zoom
         self.pop_canvas.bind("<MouseWheel>", self._on_wheel)
         self.pop_canvas.bind("<Button-4>", self._on_wheel_linux)
         self.pop_canvas.bind("<ButtonPress-1>", lambda e: self._start_pan(self.pop_canvas, e))
@@ -1198,8 +1325,6 @@ class FileViewerApp:
             self.pop_canvas = None
             self.pop_tk_image = None
         self.popwin.protocol("WM_DELETE_WINDOW", on_close)
-
-        # initial draw
         self._render_all()
 
 
