@@ -69,7 +69,7 @@ def _reveal_in_file_manager(path: str):
 class FileViewerApp:
     def __init__(self, root, start_dir: str | None = None):
         self.root = root
-        self.root.title("File Viewer")
+        self.root.title("RESEARCH LOGGER")
         self.root.geometry("1480x940")
         self.root.minsize(1200, 780)
         self.root.configure()
@@ -112,8 +112,8 @@ class FileViewerApp:
 
         # config (preferences + presets)
         self.config = {
-            "default_open_dir": None,
-            "default_session_path": None,
+            "default_open_dir": "/Users/sjohnstone/Python/RESEARCHV2/TEST",
+            "default_session_path": "/Users/sjohnstone/Python/RESEARCHV2/TEST",
             "presets": {}
         }
 
@@ -143,14 +143,15 @@ class FileViewerApp:
         file_menu = tk.Menu(menubar, tearoff=False)
         file_menu.add_command(label="Open Folder…", command=self.open_folder, accelerator="Ctrl+O")
         file_menu.add_command(label="Add Files…", command=self.add_files, accelerator="Ctrl+Shift+O")
-        file_menu.add_command(label="Remove Selected", command=self.remove_selected, accelerator="Del")
+        file_menu.add_command(label="Remove Selected Files", command=self.remove_selected, accelerator="Del")
         file_menu.add_separator()
-        file_menu.add_command(label="Save Session", command=self.save_session, accelerator="Ctrl+S")
-        file_menu.add_command(label="Save Session As…", command=self.save_session_as)
-        file_menu.add_command(label="Load Session…", command=self.load_session_from_file)
-        file_menu.add_command(label="Clear Session", command=self.clear_session_ui)
+        file_menu.add_command(label="Save Research Session", command=self.save_session, accelerator="Ctrl+S")
+        file_menu.add_command(label="Save Research Session As…", command=self.save_session_as)
+        file_menu.add_command(label="Load Research Session", command=self.load_session_from_file)
         file_menu.add_separator()
-        file_menu.add_command(label="Quit", command=self.root.quit, accelerator="Ctrl+Q")
+        file_menu.add_command(label="Clear Research Session", command=self.clear_session_ui)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit Program", command=self.root.quit, accelerator="Ctrl+Q")
         menubar.add_cascade(label="File", menu=file_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -161,10 +162,10 @@ class FileViewerApp:
         view_menu.add_command(label="Zoom Out", command=lambda: self._zoom(1/1.1), accelerator="-")
         menubar.add_cascade(label="View", menu=view_menu)
 
-        presets_menu = tk.Menu(menubar, tearoff=False)
-        presets_menu.add_command(label="Save Current as Preset…", command=self.save_preset)
-        presets_menu.add_command(label="Load Preset…", command=self.load_preset)
-        menubar.add_cascade(label="Presets", menu=presets_menu)
+        # presets_menu = tk.Menu(menubar, tearoff=False)
+        # presets_menu.add_command(label="Save Current as Preset…", command=self.save_preset)
+        # presets_menu.add_command(label="Load Preset…", command=self.load_preset)
+        # menubar.add_cascade(label="Presets", menu=presets_menu)
 
         tools_menu = tk.Menu(menubar, tearoff=False)
         tools_menu.add_command(label="Scan Renames", command=self.scan_bulk_renames)
@@ -1087,7 +1088,7 @@ class FileViewerApp:
             self.listbox.delete(i)
             self.listbox.insert(i, dest_name)
             try:
-                self.listbox.itemconfig(i, fg="black")
+                self.listbox.itemconfig(i, fg="white")
             except Exception:
                 pass
             if self.current_index == i:
@@ -1107,7 +1108,7 @@ class FileViewerApp:
                 self.listbox.delete(i)
                 self.listbox.insert(i, base)
                 try:
-                    self.listbox.itemconfig(i, fg="black")
+                    self.listbox.itemconfig(i, fg="white")
                 except Exception:
                     pass
             except Exception:
@@ -1123,10 +1124,10 @@ class FileViewerApp:
         cfg_path = self.config.get("default_session_path")
         if cfg_path:
             return cfg_path
-        return os.path.join(os.path.expanduser("~"), ".fileviewer_session.json")
+        return os.path.join(os.path.expanduser("~"), ".fileviewer_session.research")
 
     def _config_path(self) -> str:
-        return os.path.join(os.path.expanduser("~"), ".fileviewer_config.json")
+        return os.path.join(os.path.expanduser("~"), ".fileviewer_config.research")
 
     def save_session(self):
         path = self._state_path() if self.config.get("default_session_path") else None
@@ -1136,7 +1137,7 @@ class FileViewerApp:
         self._write_session(path)
 
     def save_session_as(self):
-        path = filedialog.asksaveasfilename(title="Save Session As…", defaultextension=".json", filetypes=[("JSON", "*.json")])
+        path = filedialog.asksaveasfilename(title="Save Research Session As…", defaultextension=".research", filetypes=[("RESEARCH", "*.research")])
         if not path:
             return
         self._write_session(path)
@@ -1156,7 +1157,7 @@ class FileViewerApp:
             messagebox.showerror("Save Session", "Could not save session:\n" + str(e))
 
     def load_session_from_file(self):
-        path = filedialog.askopenfilename(title="Load Session…", filetypes=[("JSON", "*.json"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(title="Load Session…", filetypes=[("RESEARCH", "*.research")])
         if not path:
             return
         try:
@@ -1324,6 +1325,13 @@ class FileViewerApp:
             self.popwin = None
             self.pop_canvas = None
             self.pop_tk_image = None
+            # # Display a confirmation dialog box
+            # if messagebox.askyesno("Confirm Close", "Are you sure you want to close the application?"):
+            # # If the user clicks 'Yes', destroy the window
+            # root.destroy()
+            # If the user clicks 'No', the window remains open
+
+
         self.popwin.protocol("WM_DELETE_WINDOW", on_close)
         self._render_all()
 
