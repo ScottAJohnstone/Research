@@ -1,3 +1,4 @@
+import datetime
 import os
 import sys
 import json
@@ -88,7 +89,7 @@ class FileViewerApp:
         self.files = []                # type: list[str]
         self.current_index = None      # type: int | None
         self.current_path = None       # type: str | None
-        self.mode = None               # 'image' or 'text'
+        self.mode = None               # 'image' or 'text' for previewer
 
         # image/pdf render state
         self.base_image = None         # type: Image.Image | None
@@ -113,14 +114,15 @@ class FileViewerApp:
         # config (preferences + presets)
         self.config = {
             "default_open_dir": "/Users/sjohnstone/Python/RESEARCHV2/TEST",
-            "default_session_path": "/Users/sjohnstone/Python/RESEARCHV2/TEST",
-            "presets": {}
+            "default_session_path": "/Users/sjohnstone/Python/RESEARCHV2/usr",
+            "presets": {},
+            "prev_job_id": "",
         }
 
         # rename preview state
         self.rename_preview = {}
 
-        # ui
+        # UI
         self._build_menu()
         self._build_layout()
         self._bind_events()
@@ -171,6 +173,9 @@ class FileViewerApp:
         tools_menu.add_command(label="Scan Renames", command=self.scan_bulk_renames)
         tools_menu.add_command(label="Clear Rename Preview", command=self.clear_bulk_rename_preview)
         tools_menu.add_command(label="Apply Renames…", command=self.apply_bulk_renames)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Create C3D layers from ALL valid filenames", accelerator="L") #. work on
+        tools_menu.add_command(label="Create C3D layer from filename...") #. work on
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         help_menu = tk.Menu(menubar, tearoff=False)
@@ -1121,63 +1126,153 @@ class FileViewerApp:
 
     # ----- session & config (manual sessions) -----
     def _state_path(self) -> str:
-        cfg_path = self.config.get("default_session_path")
-        if cfg_path:
-            return cfg_path
+        folder = self.config.get("default_session_path")
+        if folder:
+            # make sure the folder exists
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except Exception:
+                pass
+            # always save to this file inside that folder
+            return os.path.join(folder, "autosave.rdata")                        #- Add Date And JobID?
+
+        # fallback if not configured
         return os.path.join(os.path.expanduser("~"), ".fileviewer_session.research")
 
+
     def _config_path(self) -> str:
-        return os.path.join(os.path.expanduser("~"), ".fileviewer_config.research")
+        return os.path.join(os.path.expanduser("~"), ".fileviewer_config.rdata")
 
     def save_session(self):
+        # Save to the default session path if we have one,
+        # otherwise ask user where to save
         path = self._state_path() if self.config.get("default_session_path") else None
         if not path:
             self.save_session_as()
             return
         self._write_session(path)
 
+
     def save_session_as(self):
-        path = filedialog.asksaveasfilename(title="Save Research Session As…", defaultextension=".research", filetypes=[("RESEARCH", "*.research")])
+        path = filedialog.asksaveasfilename(
+            title="Save Research Session As…",
+            defaultextension=".rdata",
+            filetypes=[("RESEARCH", "*.rddata")]
+        )
         if not path:
             return
+
+        # remember this location for future quick-saves
+        self.config["default_session_path"] = os.path.dirname(path)
+        # if you have a helper like _save_config() already, call it:
+        if hasattr(self, "_save_config"):
+            self._save_config()
+
         self._write_session(path)
+
 
     def _write_session(self, path: str):
         try:
-            data = {
+            data_file_viewer = {
                 "files": self.files,
                 "current_index": self.current_index,
                 "current_path": self.current_path,
-                "page_index": self.pdf_page_index if self.pdf_doc else self.doc_page_index,
+                "page_index": self.pdf_page_index if getattr(self, "pdf_doc", None) else self.doc_page_index,
                 "current_dir": self.current_dir,
             }
+
+            data_research = {
+                "test": None
+            }
+
+            job_data = {
+                "info": {
+                    "job_number": "",
+                    "pid": "",
+                    "address": "",
+                    "client": ""
+                },
+                "metadata": {
+                    "date_created": "2025-11-02",
+                    "last_modified": "",
+                    "created_by": "Scott"
+                }
+            }
+
+            full_payload = {
+                "job_data": job_data,
+                "data_file_viewer": data_file_viewer,
+                "data_research": data_research,
+                "_meta": {
+                    "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "version": 1,
+                }
+            }
+
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+                json.dump(full_payload, f, indent=2)
+
         except Exception as e:
             messagebox.showerror("Save Session", "Could not save session:\n" + str(e))
 
+
     def load_session_from_file(self):
-        path = filedialog.askopenfilename(title="Load Session…", filetypes=[("RESEARCH", "*.research")])
+        # Prefer whatever is in config, but fall back to hardcoded usr folder
+        start_dir = self.config.get("default_session_path")
+        if not start_dir:
+            start_dir = "/Users/sjohnstone/Python/RESEARCHV2/usr"
+
+        # Make sure the directory actually exists, or ignore it
+        if not os.path.isdir(start_dir):
+            start_dir = os.path.expanduser("~")
+
+        path = filedialog.askopenfilename(
+            title="Load Session…",
+            initialdir=start_dir,
+            filetypes=[("RESEARCH", "*.rdata"), ("All Files", "*.*")],
+        )
         if not path:
             return
+
         try:
             with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            files = [p for p in data.get("files", []) if os.path.exists(p) and (_is_supported(p) or _is_text(p))]
+                data = json.load(f)  # <- now valid because we fixed the trailing comma
+
+            # --- pull the viewer block ---
+            viewer = data.get("data_file_viewer", {})
+
+            # restore file list
+            files = [
+                p for p in viewer.get("files", [])
+                if os.path.exists(p) and (_is_supported(p) or _is_text(p))
+            ]
             self.files = files
+
+            # repopulate the listbox
             self.listbox.delete(0, tk.END)
             for p in self.files:
                 self.listbox.insert(tk.END, os.path.basename(p))
-            self.current_dir = data.get("current_dir")
-            idx = data.get("current_index")
+
+            # restore directory info
+            self.current_dir = viewer.get("current_dir")
+
+            # figure out which index to open
+            idx = viewer.get("current_index")
             if idx is None or not (0 <= idx < len(self.files)):
                 idx = 0 if self.files else None
             if idx is not None:
                 self._open_index(idx)
-            self.doc_page_index = int(data.get("page_index") or 0)
+
+            # restore page index
+            self.doc_page_index = int(viewer.get("page_index") or 0)
             if self.doc_page_count > 1:
                 self.page_entry_var.set(str(self.doc_page_index + 1))
                 self.page_go()
+
+            # --- pull any future sections safely ---
+            # e.g. your "data_research" block
+            self.research_data = data.get("data_research", {})
+
         except Exception as e:
             messagebox.showerror("Load Session", "Could not load session:\n" + str(e))
 
@@ -1189,7 +1284,10 @@ class FileViewerApp:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, dict):
-                self.config.update(data)
+                # only overwrite keys with truthy values
+                for k, v in data.items():
+                    if v not in (None, "", []):
+                        self.config[k] = v
         except Exception:
             pass
 

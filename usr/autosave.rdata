@@ -1,0 +1,31 @@
+{
+  "job_data": {
+    "info": {
+      "job_number": "",
+      "pid": "",
+      "address": "",
+      "client": ""
+    },
+    "metadata": {
+      "date_created": "2025-11-02",
+      "last_modified": "",
+      "created_by": "Scott"
+    }
+  },
+  "data_file_viewer": {
+    "files": [
+      "/Users/sjohnstone/Python/RESEARCHV2/debug/Vol.12-Pg.12 (a 2).jpg"
+    ],
+    "current_index": 0,
+    "current_path": "/Users/sjohnstone/Python/RESEARCHV2/debug/Vol.12-Pg.12 (a 2).jpg",
+    "page_index": 0,
+    "current_dir": "/Users/sjohnstone/Python/RESEARCHV2/TEST"
+  },
+  "data_research": {
+    "test": null
+  },
+  "_meta": {
+    "created_at": "2025-11-02T13:28:32",
+    "version": 1
+  }
+}
