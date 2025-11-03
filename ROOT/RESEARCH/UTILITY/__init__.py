@@ -4,3 +4,4 @@ from .math import add, subtract, multiply, divide
 from .date_time import *
 from .hovertipfix import *
 from .string_test import *
+from .helper import collect_runtime_data

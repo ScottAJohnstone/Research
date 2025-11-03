@@ -1,0 +1,24 @@
+{
+  "job_id": "5555",
+  "address": {
+    "line1": "44 Norman Road",
+    "line2": "",
+    "city": "Stamford",
+    "state": "CT",
+    "zip": ""
+  },
+  "client_name": "",
+  "notes": "",
+  "created": {
+    "timestamp": "2025-11-02T21:56:11",
+    "date": "2025-11-02",
+    "time": "21:56:11",
+    "python_version": "3.12.3",
+    "os": "Darwin",
+    "os_version": "Darwin Kernel Version 21.6.0: Mon Jun 24 00:56:10 PDT 2024; root:xnu-8020.240.18.709.2~1/RELEASE_X86_64",
+    "platform_release": "21.6.0",
+    "machine": "x86_64",
+    "processor": "i386",
+    "cwd": "/Users/sjohnstone/Python/RESEARCHV2"
+  }
+}

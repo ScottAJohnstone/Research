@@ -4,10 +4,12 @@ import sys
 import json
 import re
 import subprocess
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 from PIL.Image import Resampling
+
 
 """
 Image/PDF/Text File Viewer
@@ -1133,8 +1135,7 @@ class FileViewerApp:
                 os.makedirs(folder, exist_ok=True)
             except Exception:
                 pass
-            # always save to this file inside that folder
-            return os.path.join(folder, "autosave.rdata")                        #- Add Date And JobID?
+            return os.path.join(folder,"autosave.rdata")                    #- Add Date?
 
         # fallback if not configured
         return os.path.join(os.path.expanduser("~"), ".fileviewer_session.research")
@@ -1151,7 +1152,6 @@ class FileViewerApp:
             self.save_session_as()
             return
         self._write_session(path)
-
 
     def save_session_as(self):
         path = filedialog.asksaveasfilename(
@@ -1192,10 +1192,9 @@ class FileViewerApp:
                     "address": "",
                     "client": ""
                 },
-                "metadata": {
-                    "date_created": "2025-11-02",
-                    "last_modified": "",
-                    "created_by": "Scott"
+                "_meta": {
+                    "modified": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "creator": "Scott"
                 }
             }
 

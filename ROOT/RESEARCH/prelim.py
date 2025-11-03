@@ -19,10 +19,10 @@ from idlelib.tooltip import Hovertip
 import socket
 
 # Relative Imports
-from UTILITY import date_time as dt
-from UTILITY import other as o
-from UTILITY import Hovertip
-from UTILITY import string_test as st
+from utility import date_time as dt
+from utility import other as o
+from utility import Hovertip
+from utility import string_test as st
 
 
 def prelim():
